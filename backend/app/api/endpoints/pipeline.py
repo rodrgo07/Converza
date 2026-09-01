@@ -1,5 +1,5 @@
-from typing import List, Optional
-from datetime import datetime
+﻿from typing import List, Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -66,6 +66,7 @@ def create_opportunity(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    now = datetime.now(timezone.utc)
     opp = Opportunity(
         company_id=current_user.company_id,
         customer_id=opp_in.customer_id,
@@ -75,7 +76,9 @@ def create_opportunity(
         probability=opp_in.probability,
         expected_close_date=opp_in.expected_close_date,
         assigned_user_id=opp_in.assigned_user_id or current_user.id,
-        notes=opp_in.notes
+        notes=opp_in.notes,
+        created_at=now,
+        updated_at=now
     )
     db.add(opp)
     db.commit()
@@ -100,7 +103,7 @@ def update_opportunity(
     for field, val in update_data.items():
         setattr(opp, field, val)
 
-    opp.updated_at = datetime.utcnow()
+    opp.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(opp)
     return opp

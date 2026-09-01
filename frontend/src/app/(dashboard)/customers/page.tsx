@@ -72,7 +72,7 @@ export default function CustomersPage() {
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName || !newPhone) {
+    if (!newName.trim() || !newPhone.trim()) {
       error("Nome e telefone são obrigatórios.");
       return;
     }
@@ -82,17 +82,17 @@ export default function CustomersPage() {
       const created = await apiFetch<Customer>("/customers", {
         method: "POST",
         body: JSON.stringify({
-          name: newName,
-          phone: newPhone,
-          email: newEmail || undefined,
-          company_name: newCompany || undefined,
-          notes: newNotes || undefined,
+          name: newName.trim(),
+          phone: newPhone.trim(),
+          email: newEmail.trim() || undefined,
+          company_name: newCompany.trim() || undefined,
+          notes: newNotes.trim() || undefined,
           tag_ids: selectedTagIds,
         }),
       });
 
       setCustomers([created, ...customers]);
-      success(`Cliente ${created.name} cadastrado com sucesso!`);
+      success(`Cliente ${created.name} cadastrado com sucesso no banco de dados!`);
       setShowModal(false);
       setNewName("");
       setNewPhone("");
@@ -120,7 +120,7 @@ export default function CustomersPage() {
     <div className={styles.page}>
       <Header
         title="Clientes"
-        subtitle="Sua base organizada de contatos e compradores do WhatsApp"
+        subtitle="Sua base de contatos reais cadastrados no PostgreSQL"
       />
 
       <div className={styles.content}>
@@ -165,92 +165,96 @@ export default function CustomersPage() {
           </button>
         </div>
 
-        {/* Customers Table / Grid */}
+        {/* Customers Table */}
         <div className={styles.tableCard}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Telefone</th>
-                <th>Tags</th>
-                <th>Responsável</th>
-                <th>Total Comprado</th>
-                <th>Última Interação</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((cust) => (
-                <tr key={cust.id}>
-                  <td>
-                    <div className={styles.nameCell}>
-                      <div className={styles.avatar}>
-                        {cust.name.charAt(0)}
-                      </div>
-                      <div>
-                        <span className={styles.customerName}>{cust.name}</span>
-                        <span className={styles.companySub}>{cust.company_name || "Pessoa Física"}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className={styles.phoneText}>{formatPhone(cust.phone)}</td>
-                  <td>
-                    <div className={styles.tagList}>
-                      {cust.customer_tags?.map((ct) => (
-                        <span
-                          key={ct.id}
-                          className={styles.tagBadge}
-                          style={{ backgroundColor: `${ct.tag.color}20`, color: ct.tag.color }}
-                        >
-                          {ct.tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td>
-                    <span className={styles.assignedBadge}>
-                      {cust.assigned_user?.name || "Não atribuído"}
-                    </span>
-                  </td>
-                  <td className={styles.spentText}>{formatCurrency(cust.total_spent)}</td>
-                  <td className={styles.dateText}>
-                    {new Date(cust.last_interaction).toLocaleDateString("pt-BR")}
-                  </td>
-                  <td>
-                    <div className={styles.rowActions}>
-                      <Link
-                        href={`/inbox?customer_id=${cust.id}`}
-                        className={styles.actionIconBtn}
-                        title="Conversar no WhatsApp"
-                      >
-                        <MessageSquare size={15} />
-                      </Link>
-                    </div>
-                  </td>
+          {filtered.length > 0 ? (
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Telefone</th>
+                  <th>Tags</th>
+                  <th>Responsável</th>
+                  <th>Total Comprado</th>
+                  <th>Data de Cadastro</th>
+                  <th>Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filtered.length === 0 && (
+              </thead>
+              <tbody>
+                {filtered.map((cust) => (
+                  <tr key={cust.id}>
+                    <td>
+                      <div className={styles.nameCell}>
+                        <div className={styles.avatar}>
+                          {cust.name.charAt(0)}
+                        </div>
+                        <div>
+                          <span className={styles.customerName}>{cust.name}</span>
+                          <span className={styles.companySub}>{cust.company_name || "Pessoa Física"}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={styles.phoneText}>{formatPhone(cust.phone)}</td>
+                    <td>
+                      <div className={styles.tagList}>
+                        {cust.customer_tags && cust.customer_tags.length > 0 ? (
+                          cust.customer_tags.map((ct) => (
+                            <span
+                              key={ct.id}
+                              className={styles.tagBadge}
+                              style={{ backgroundColor: `${ct.tag.color}20`, color: ct.tag.color }}
+                            >
+                              {ct.tag.name}
+                            </span>
+                          ))
+                        ) : (
+                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={styles.assignedBadge}>
+                        {cust.assigned_user?.name || "Não atribuído"}
+                      </span>
+                    </td>
+                    <td className={styles.spentText}>{formatCurrency(cust.total_spent)}</td>
+                    <td className={styles.dateText}>
+                      {new Date(cust.created_at).toLocaleDateString("pt-BR")}
+                    </td>
+                    <td>
+                      <div className={styles.rowActions}>
+                        <Link
+                          href={`/inbox?customer_id=${cust.id}`}
+                          className={styles.actionIconBtn}
+                          title="Abrir Conversa"
+                        >
+                          <MessageSquare size={15} />
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
             <div className={styles.emptyState}>
               <Users size={40} className={styles.emptyIcon} />
-              <h3>Nenhum cliente encontrado</h3>
-              <p>Adicione um novo cliente ou ajuste sua busca.</p>
+              <h3>Nenhum cliente cadastrado</h3>
+              <p>Adicione seu primeiro contato para começar a registrar conversas e oportunidades.</p>
               <button
                 onClick={() => setShowModal(true)}
                 className={styles.addCustomerBtn}
                 style={{ marginTop: 12 }}
               >
                 <Plus size={16} />
-                <span>Adicionar Primeiro Cliente</span>
+                <span>Cadastrar Primeiro Cliente</span>
               </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal Criar Cliente (3 cliques) */}
+      {/* Modal Criar Cliente */}
       {showModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modal}>
@@ -283,7 +287,7 @@ export default function CustomersPage() {
                   <input
                     type="text"
                     required
-                    placeholder="+55 (11) 98765-4321"
+                    placeholder="(11) 98765-4321"
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
                     className={styles.modalInput}
@@ -337,7 +341,7 @@ export default function CustomersPage() {
                   disabled={isCreating}
                   className={styles.modalSubmitBtn}
                 >
-                  {isCreating ? "Salvando..." : "Salvar Cliente"}
+                  {isCreating ? "Salvando no Banco..." : "Salvar Cliente"}
                 </button>
               </div>
             </form>

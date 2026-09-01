@@ -8,8 +8,8 @@ import styles from "./Auth.module.css";
 import { MessageSquare, ArrowRight, Lock, Mail, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("rodrigo@lojadodigo.com.br");
-  const [password, setPassword] = useState("senha123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const { error, success } = useToast();
@@ -17,16 +17,16 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      error("Preencha todos os campos.");
+      error("Preencha seu e-mail e senha.");
       return;
     }
 
     try {
       setIsLoading(true);
       await login(email, password);
-      success("Bem-vindo de volta ao Converza!");
+      success("Login efetuado com sucesso!");
     } catch (err: any) {
-      error(err.message || "Erro ao efetuar login.");
+      error(err.message || "E-mail ou senha incorretos.");
     } finally {
       setIsLoading(false);
     }
@@ -86,11 +86,6 @@ export default function LoginPage() {
             <ArrowRight size={16} />
           </button>
         </form>
-
-        <div className={styles.demoNotice}>
-          <Sparkles size={14} className={styles.demoIcon} />
-          <span>Demo pré-preenchida com dados reais para teste imediato.</span>
-        </div>
 
         <div className={styles.footer}>
           Não tem uma conta ainda?{" "}

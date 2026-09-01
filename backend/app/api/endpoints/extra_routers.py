@@ -1,8 +1,8 @@
 ﻿from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from app.db.session import get_db
 from app.models import (
     Tag, QuickReply, WhatsAppAccount, Notification, Subscription, Company, User,
@@ -38,7 +38,7 @@ def create_tag(tag_in: TagCreate, current_user: User = Depends(get_current_user)
 def delete_tag(tag_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tag = db.query(Tag).filter(Tag.id == tag_id, Tag.company_id == current_user.company_id).first()
     if not tag:
-        raise HTTPException(status_code=404, detail='Tag nao encontrada.')
+        raise HTTPException(status_code=404, detail='Tag não encontrada.')
     db.delete(tag)
     db.commit()
     return {'message': 'Tag removida.'}
@@ -68,7 +68,7 @@ def create_quick_reply(qr_in: QuickReplyCreate, current_user: User = Depends(get
 def update_quick_reply(qr_id: int, qr_in: QuickReplyUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     qr = db.query(QuickReply).filter(QuickReply.id == qr_id, QuickReply.company_id == current_user.company_id).first()
     if not qr:
-        raise HTTPException(status_code=404, detail='Resposta rapida nao encontrada.')
+        raise HTTPException(status_code=404, detail='Resposta rápida não encontrada.')
     update_data = qr_in.model_dump(exclude_unset=True)
     if 'shortcut' in update_data and update_data['shortcut'] and not update_data['shortcut'].startswith('/'):
         update_data['shortcut'] = f"/{update_data['shortcut']}"
@@ -82,10 +82,10 @@ def update_quick_reply(qr_id: int, qr_in: QuickReplyUpdate, current_user: User =
 def delete_quick_reply(qr_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     qr = db.query(QuickReply).filter(QuickReply.id == qr_id, QuickReply.company_id == current_user.company_id).first()
     if not qr:
-        raise HTTPException(status_code=404, detail='Resposta rapida nao encontrada.')
+        raise HTTPException(status_code=404, detail='Resposta rápida não encontrada.')
     db.delete(qr)
     db.commit()
-    return {'message': 'Resposta rapida removida.'}
+    return {'message': 'Resposta rápida removida.'}
 
 # WHATSAPP ROUTER
 wa_router = APIRouter()
@@ -114,11 +114,11 @@ def connect_whatsapp(conn_in: WhatsAppConnectRequest, current_user: User = Depen
         account = WhatsAppAccount(company_id=current_user.company_id)
         db.add(account)
 
-    account.phone_number_id = conn_in.phone_number_id or '108482938194012'
-    account.business_account_id = conn_in.business_account_id or '9284918239012'
-    account.display_phone_number = conn_in.display_phone_number or '+55 11 98765-4321'
-    account.verified_name = conn_in.verified_name or 'Converza WhatsApp'
-    account.access_token = conn_in.access_token or 'EAAB...'
+    account.phone_number_id = conn_in.phone_number_id or ''
+    account.business_account_id = conn_in.business_account_id or ''
+    account.display_phone_number = conn_in.display_phone_number or ''
+    account.verified_name = conn_in.verified_name or ''
+    account.access_token = conn_in.access_token or ''
     account.is_connected = True
     account.status = 'connected'
 
@@ -197,7 +197,7 @@ def upgrade_subscription(
     sub.max_customers = max_c
     sub.price_cents = price
     sub.status = 'active'
-    sub.current_period_end = datetime.utcnow() + timedelta(days=30)
+    sub.current_period_end = datetime.now(timezone.utc) + timedelta(days=30)
     db.commit()
     db.refresh(sub)
     return sub
@@ -217,11 +217,11 @@ def add_team_member(
     db: Session = Depends(get_db)
 ):
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise HTTPException(status_code=403, detail='Apenas administradores ou gerentes podem adicionar usuarios.')
+        raise HTTPException(status_code=403, detail='Apenas administradores ou gerentes podem adicionar usuários.')
 
     existing = db.query(User).filter(User.email == user_in.email.lower()).first()
     if existing:
-        raise HTTPException(status_code=400, detail='E-mail ja cadastrado.')
+        raise HTTPException(status_code=400, detail='E-mail já cadastrado.')
 
     member = User(
         company_id=company.id,
@@ -246,10 +246,10 @@ def update_team_member(
 ):
     member = db.query(User).filter(User.id == user_id, User.company_id == current_user.company_id).first()
     if not member:
-        raise HTTPException(status_code=404, detail='Usuario nao encontrado.')
+        raise HTTPException(status_code=404, detail='Usuário não encontrado.')
 
     if member.id != current_user.id and current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise HTTPException(status_code=403, detail='Sem permissao.')
+        raise HTTPException(status_code=403, detail='Sem permissão.')
 
     update_data = user_in.model_dump(exclude_unset=True)
     if 'password' in update_data and update_data['password']:
@@ -309,16 +309,21 @@ def get_dashboard_metrics(current_user: User = Depends(get_current_user), db: Se
             'value': round(val, 2)
         })
 
-    # Sales by day
-    chart_data = [
-        {'day': 'Seg', 'vendas': 1250},
-        {'day': 'Ter', 'vendas': 2100},
-        {'day': 'Qua', 'vendas': 800},
-        {'day': 'Qui', 'vendas': 2950},
-        {'day': 'Sex', 'vendas': 3400},
-        {'day': 'Sab', 'vendas': 1800},
-        {'day': 'Dom', 'vendas': 600},
-    ]
+    # Sales by day - calculated dynamically from real customer purchases/interactions in the last 7 days
+    days_map = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+    now = datetime.now(timezone.utc)
+    chart_data = []
+    for i in range(6, -1, -1):
+        target_date = (now - timedelta(days=i)).date()
+        day_label = days_map[target_date.weekday()]
+        
+        # Real sum of purchases on that day
+        day_sales = db.query(func.sum(Customer.total_spent)).filter(
+            Customer.company_id == cid,
+            func.date(Customer.last_purchase_date) == target_date
+        ).scalar() or 0.0
+        
+        chart_data.append({'day': day_label, 'vendas': round(float(day_sales), 2)})
 
     urgent_fu = db.query(FollowUp).filter(
         FollowUp.company_id == cid,
@@ -353,12 +358,22 @@ def get_reports_summary(current_user: User = Depends(get_current_user), db: Sess
     customers_count = db.query(Customer).filter(Customer.company_id == cid).count()
     ticket_medio = round(total_sales / orders_count, 2) if orders_count > 0 else 0.0
 
+    # Total real messages in company conversations
+    total_msgs = db.query(func.count(Conversation.id)).filter(Conversation.company_id == cid).scalar() or 0
+    total_opps = db.query(func.count(Opportunity.id)).filter(Opportunity.company_id == cid).scalar() or 0
+    closed_sales_count = db.query(func.count(Opportunity.id)).join(PipelineStage).filter(
+        Opportunity.company_id == cid,
+        PipelineStage.stage_type == 'sale'
+    ).scalar() or 0
+
+    conversion_rate = round((closed_sales_count / total_opps * 100), 1) if total_opps > 0 else 0.0
+
     return {
         'total_sales': round(total_sales, 2),
         'orders_count': orders_count,
         'customers_count': customers_count,
         'average_ticket': ticket_medio,
-        'conversion_rate': 28.5,
-        'average_response_time_minutes': 4.2,
-        'messages_exchanged': 486,
+        'conversion_rate': conversion_rate,
+        'average_response_time_minutes': 0.0,
+        'messages_exchanged': total_msgs,
     }

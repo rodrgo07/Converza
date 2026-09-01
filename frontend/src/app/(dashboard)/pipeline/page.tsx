@@ -17,7 +17,8 @@ import {
   Clock,
   MoreVertical,
   Trash2,
-  X
+  X,
+  Target
 } from "lucide-react";
 
 export default function PipelinePage() {
@@ -118,7 +119,7 @@ export default function PipelinePage() {
         method: "PUT",
         body: JSON.stringify({ stage_id: targetStageId }),
       });
-      success("Etapa da oportunidade atualizada!");
+      success("Etapa salva no PostgreSQL!");
     } catch {
       error("Erro ao mover oportunidade.");
       loadKanban();
@@ -127,7 +128,7 @@ export default function PipelinePage() {
 
   const handleCreateOpportunity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCustomerId || !oppTitle || !selectedStageId) {
+    if (!selectedCustomerId || !oppTitle.trim() || !selectedStageId) {
       error("Preencha todos os campos obrigatórios.");
       return;
     }
@@ -139,14 +140,14 @@ export default function PipelinePage() {
         body: JSON.stringify({
           customer_id: Number(selectedCustomerId),
           stage_id: Number(selectedStageId),
-          title: oppTitle,
+          title: oppTitle.trim(),
           value: parseFloat(oppValue) || 0.0,
           probability: oppProbability,
-          notes: oppNotes || undefined,
+          notes: oppNotes.trim() || undefined,
         }),
       });
 
-      success("Oportunidade adicionada ao pipeline!");
+      success("Oportunidade criada no banco de dados!");
       setShowModal(false);
       setOppTitle("");
       setOppValue("");
@@ -158,6 +159,8 @@ export default function PipelinePage() {
       setIsSaving(false);
     }
   };
+
+  const totalOppsCount = columns.reduce((acc, col) => acc + col.count, 0);
 
   return (
     <div className={styles.page}>
@@ -239,7 +242,7 @@ export default function PipelinePage() {
 
                 {col.opportunities.length === 0 && (
                   <div className={styles.emptyColDropzone}>
-                    <span>Arraste oportunidades aqui</span>
+                    <span>Nenhuma oportunidade nesta etapa</span>
                   </div>
                 )}
               </div>
@@ -265,19 +268,25 @@ export default function PipelinePage() {
             <form onSubmit={handleCreateOpportunity} className={styles.modalForm}>
               <div className={styles.formGroup}>
                 <label className={styles.label}>Cliente do WhatsApp *</label>
-                <select
-                  required
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(Number(e.target.value))}
-                  className={styles.modalSelect}
-                >
-                  <option value="">Selecione um cliente...</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({formatPhone(c.phone)})
-                    </option>
-                  ))}
-                </select>
+                {customers.length > 0 ? (
+                  <select
+                    required
+                    value={selectedCustomerId}
+                    onChange={(e) => setSelectedCustomerId(Number(e.target.value))}
+                    className={styles.modalSelect}
+                  >
+                    <option value="">Selecione um cliente...</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({formatPhone(c.phone)})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Nenhum cliente cadastrado ainda. Cadastre um cliente primeiro em <Link href="/customers" style={{ color: "var(--brand-primary)", textDecoration: "underline" }}>Clientes</Link>.
+                  </div>
+                )}
               </div>
 
               <div className={styles.formGroup}>
@@ -285,7 +294,7 @@ export default function PipelinePage() {
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Kit 4 Peças Slim Fit"
+                  placeholder="Ex: Orçamento de Serviço / Venda de Produto"
                   value={oppTitle}
                   onChange={(e) => setOppTitle(e.target.value)}
                   className={styles.modalInput}
@@ -325,7 +334,7 @@ export default function PipelinePage() {
               <div className={styles.formGroup}>
                 <label className={styles.label}>Observações da Proposta</label>
                 <textarea
-                  placeholder="Detalhes sobre negociação, prazo de entrega acordado..."
+                  placeholder="Detalhes da negociação..."
                   value={oppNotes}
                   onChange={(e) => setOppNotes(e.target.value)}
                   className={styles.modalTextarea}
@@ -343,10 +352,10 @@ export default function PipelinePage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
+                  disabled={isSaving || customers.length === 0}
                   className={styles.modalSubmitBtn}
                 >
-                  {isSaving ? "Salvando..." : "Salvar no Pipeline"}
+                  {isSaving ? "Salvando no PostgreSQL..." : "Salvar no Pipeline"}
                 </button>
               </div>
             </form>

@@ -163,6 +163,25 @@
   border-radius: var(--radius-full);
 }
 
+.emptyListNotice {
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.linkAddCust {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  text-decoration: underline;
+}
+
 /* COLUNA 2: Chat */
 .colChat {
   display: flex;
@@ -217,33 +236,20 @@
   gap: 8px;
 }
 
-.simReplyBtn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.profileBtn {
   padding: 6px 12px;
   background-color: var(--bg-surface-secondary);
   border: 1px solid var(--border-color);
+  color: var(--text-secondary);
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary);
-  transition: all 0.15s ease;
 }
 
-.simReplyBtn:hover {
+.profileBtn:hover {
   background-color: var(--brand-primary-light);
   color: var(--brand-primary);
   border-color: var(--brand-primary);
-}
-
-.profileBtn {
-  padding: 6px 12px;
-  background-color: var(--brand-primary-light);
-  color: var(--brand-primary);
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .messagesContainer {
@@ -264,6 +270,16 @@
   font-size: 11px;
   color: var(--text-muted);
   margin-bottom: 12px;
+}
+
+.emptyMessagesBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  margin: auto;
+  padding: 24px;
 }
 
 .msgBubbleWrapper {
@@ -469,7 +485,22 @@
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  gap: 12px;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+}
+
+.emptyChatAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background-color: var(--brand-primary);
+  color: white;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-top: 6px;
 }
 
 /* COLUNA 3: Cliente */
@@ -536,16 +567,6 @@
   font-weight: 600;
   padding: 3px 8px;
   border-radius: var(--radius-sm);
-}
-
-.addTagBtn {
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  border: 1px dashed var(--border-color);
-  color: var(--text-muted);
 }
 
 .infoRow {

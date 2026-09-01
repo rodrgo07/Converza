@@ -1,5 +1,5 @@
-from typing import List, Optional
-from datetime import datetime
+﻿from typing import List, Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
@@ -28,7 +28,7 @@ def get_customers(
     if tag_id:
         query = query.join(CustomerTag).filter(CustomerTag.tag_id == tag_id)
 
-    customers = query.order_by(Customer.last_interaction.desc()).offset(skip).limit(limit).all()
+    customers = query.order_by(Customer.last_interaction.desc().nullslast(), Customer.created_at.desc()).offset(skip).limit(limit).all()
     return customers
 
 @router.post('/', response_model=CustomerOut)
@@ -37,6 +37,7 @@ def create_customer(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    now = datetime.now(timezone.utc)
     customer = Customer(
         company_id=current_user.company_id,
         name=customer_in.name,
@@ -45,7 +46,8 @@ def create_customer(
         company_name=customer_in.company_name,
         notes=customer_in.notes,
         assigned_user_id=customer_in.assigned_user_id or current_user.id,
-        last_interaction=datetime.utcnow()
+        last_interaction=now,
+        created_at=now
     )
     db.add(customer)
     db.flush()
@@ -55,29 +57,18 @@ def create_customer(
             ct = CustomerTag(customer_id=customer.id, tag_id=tid)
             db.add(ct)
 
-    # Automatically create a conversation thread for this customer if none exists
+    # Automatically create the real conversation thread in PostgreSQL
     conversation = Conversation(
         company_id=current_user.company_id,
         customer_id=customer.id,
         assigned_user_id=customer.assigned_user_id,
         status='open',
         unread_count=0,
-        last_message_text='Conversa iniciada',
-        last_message_time=datetime.utcnow()
+        last_message_text=None,
+        last_message_time=now,
+        created_at=now
     )
     db.add(conversation)
-    db.flush()
-
-    # Create welcome initial note or message
-    init_msg = Message(
-        conversation_id=conversation.id,
-        sender_id=current_user.id,
-        direction=MessageDirection.OUTBOUND,
-        message_type=MessageType.TEXT,
-        content=f'Cliente {customer.name} cadastrado no Converza.',
-        status=MessageStatus.DELIVERED
-    )
-    db.add(init_msg)
 
     db.commit()
     db.refresh(customer)
@@ -122,7 +113,7 @@ def update_customer(
     for field, value in update_data.items():
         setattr(customer, field, value)
 
-    customer.last_interaction = datetime.utcnow()
+    customer.last_interaction = datetime.now(timezone.utc)
     db.commit()
     db.refresh(customer)
     return customer

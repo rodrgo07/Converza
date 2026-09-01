@@ -9,23 +9,16 @@ import Header from "@/components/layout/Header";
 import styles from "./Inbox.module.css";
 import {
   Send,
-  Paperclip,
-  Smile,
   Zap,
   Phone,
   Mail,
-  Building,
-  User,
   ShoppingBag,
   Clock,
   Search,
-  Check,
   CheckCheck,
   Plus,
   MessageSquare,
-  Sparkles,
-  Bot,
-  ExternalLink
+  Users
 } from "lucide-react";
 import Link from "next/link";
 
@@ -43,7 +36,6 @@ export default function InboxPage() {
   const [searchFilter, setSearchFilter] = useState("");
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -123,45 +115,11 @@ export default function InboxPage() {
             : c
         )
       );
-      success("Mensagem enviada via WhatsApp!");
+      success("Mensagem enviada com sucesso!");
     } catch (err: any) {
       error(err.message || "Falha ao enviar mensagem.");
     } finally {
       setIsSending(false);
-    }
-  };
-
-  const handleSimulateReply = async () => {
-    if (!selectedConvId) return;
-    try {
-      setIsSimulating(true);
-      const replies = [
-        "Perfeito! Me manda a chave Pix que já vou fazer o pagamento agora.",
-        "Gostei muito do modelo, tem como reservar pra mim até amanhã?",
-        "Qual é o prazo de entrega se eu fechar hoje?",
-        "Consegue dar mais 5% de desconto no Pix à vista?",
-        "Recebi as fotos aqui, ficaram ótimas! Vou querer esse mesmo."
-      ];
-      const randomReply = replies[Math.floor(Math.random() * replies.length)];
-
-      const receivedMsg = await apiFetch<Message>(`/conversations/${selectedConvId}/simulate-receive`, {
-        method: "POST",
-        body: JSON.stringify({ content: randomReply, message_type: "text" }),
-      });
-
-      setMessages((prev) => [...prev, receivedMsg]);
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedConvId
-            ? { ...c, last_message_text: randomReply, last_message_time: new Date().toISOString() }
-            : c
-        )
-      );
-      success("Simulação: O cliente acabou de responder!");
-    } catch (err: any) {
-      error("Erro na simulação.");
-    } finally {
-      setIsSimulating(false);
     }
   };
 
@@ -183,7 +141,7 @@ export default function InboxPage() {
     <div className={styles.inboxPage}>
       <Header
         title="Caixa de Entrada"
-        subtitle="Atendimento e vendas do WhatsApp em tempo real"
+        subtitle="Atendimento e conversas reais do WhatsApp"
       />
 
       <div className={styles.inboxLayout}>
@@ -233,7 +191,7 @@ export default function InboxPage() {
 
                     <div className={styles.convBottomRow}>
                       <span className={styles.convLastMsg}>
-                        {conv.last_message_text || "Iniciar atendimento..."}
+                        {conv.last_message_text || "Sem mensagens anteriores..."}
                       </span>
                       {conv.unread_count > 0 && (
                         <span className={styles.unreadCountBadge}>
@@ -245,6 +203,16 @@ export default function InboxPage() {
                 </div>
               );
             })}
+
+            {filteredConversations.length === 0 && (
+              <div className={styles.emptyListNotice}>
+                <MessageSquare size={32} style={{ color: "var(--text-muted)", marginBottom: 8 }} />
+                <span>Nenhuma conversa encontrada.</span>
+                <Link href="/customers" className={styles.linkAddCust}>
+                  Cadastrar Cliente
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -261,26 +229,17 @@ export default function InboxPage() {
                   <div>
                     <h3 className={styles.chatCustomerName}>{activeConv.customer?.name}</h3>
                     <span className={styles.chatStatus}>
-                      WhatsApp Oficial • {formatPhone(activeConv.customer?.phone || "")}
+                      WhatsApp • {formatPhone(activeConv.customer?.phone || "")}
                     </span>
                   </div>
                 </div>
 
                 <div className={styles.chatHeaderActions}>
-                  <button
-                    onClick={handleSimulateReply}
-                    disabled={isSimulating}
-                    className={styles.simReplyBtn}
-                    title="Simular cliente respondendo"
-                  >
-                    <Bot size={14} />
-                    <span>{isSimulating ? "Recebendo..." : "Simular Resposta"}</span>
-                  </button>
                   <Link
-                    href={`/customers/${activeConv.customer_id}`}
+                    href={`/customers`}
                     className={styles.profileBtn}
                   >
-                    Ver Perfil
+                    Ver na Lista de Clientes
                   </Link>
                 </div>
               </div>
@@ -288,8 +247,16 @@ export default function InboxPage() {
               {/* Chat Message Stream */}
               <div className={styles.messagesContainer}>
                 <div className={styles.encryptionNotice}>
-                  🔒 Conversa integrada com a API Oficial do WhatsApp Business
+                  🔒 Canal oficial de mensagens do WhatsApp Business
                 </div>
+
+                {messages.length === 0 && (
+                  <div className={styles.emptyMessagesBox}>
+                    <MessageSquare size={32} style={{ color: "var(--text-muted)", marginBottom: 6 }} />
+                    <p style={{ fontWeight: 600, color: "var(--text-primary)" }}>Esta conversa ainda não possui mensagens.</p>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Envie uma mensagem abaixo para iniciar o contato com o cliente.</span>
+                  </div>
+                )}
 
                 {messages.map((msg) => {
                   const isOutbound = msg.direction === "outbound";
@@ -340,6 +307,11 @@ export default function InboxPage() {
                         <span className={styles.qrTitle}>{qr.title}</span>
                       </button>
                     ))}
+                    {quickReplies.length === 0 && (
+                      <div style={{ padding: 12, fontSize: 12, color: "var(--text-muted)" }}>
+                        Nenhuma resposta rápida cadastrada. Cadastre em Respostas Rápidas.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -357,7 +329,7 @@ export default function InboxPage() {
 
                 <textarea
                   className={styles.chatInput}
-                  placeholder="Escreva uma mensagem ou use respostas rápidas..."
+                  placeholder="Escreva uma mensagem..."
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   onKeyDown={(e) => {
@@ -381,8 +353,12 @@ export default function InboxPage() {
           ) : (
             <div className={styles.emptyChat}>
               <MessageSquare size={48} className={styles.emptyChatIcon} />
-              <h3>Nenhuma conversa selecionada</h3>
-              <p>Escolha um cliente à esquerda para visualizar as mensagens.</p>
+              <h3>Nenhuma conversa encontrada</h3>
+              <p>Cadastre um cliente para começar a enviar mensagens.</p>
+              <Link href="/customers" className={styles.emptyChatAddBtn}>
+                <Plus size={14} />
+                <span>Novo Cliente</span>
+              </Link>
             </div>
           )}
         </div>
@@ -396,7 +372,7 @@ export default function InboxPage() {
               </div>
               <h3 className={styles.customerName}>{activeConv.customer.name}</h3>
               <span className={styles.customerCompany}>
-                {activeConv.customer.company_name || "Cliente Final"}
+                {activeConv.customer.company_name || "Pessoa Física"}
               </span>
             </div>
 
@@ -405,16 +381,19 @@ export default function InboxPage() {
               <div className={styles.detailSection}>
                 <label className={styles.detailLabel}>Etiquetas</label>
                 <div className={styles.tagChips}>
-                  {activeConv.customer.customer_tags?.map((ct) => (
-                    <span
-                      key={ct.id}
-                      className={styles.tagChip}
-                      style={{ backgroundColor: `${ct.tag.color}20`, color: ct.tag.color }}
-                    >
-                      {ct.tag.name}
-                    </span>
-                  ))}
-                  <button className={styles.addTagBtn}>+ Tag</button>
+                  {activeConv.customer.customer_tags && activeConv.customer.customer_tags.length > 0 ? (
+                    activeConv.customer.customer_tags.map((ct) => (
+                      <span
+                        key={ct.id}
+                        className={styles.tagChip}
+                        style={{ backgroundColor: `${ct.tag.color}20`, color: ct.tag.color }}
+                      >
+                        {ct.tag.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Nenhuma tag vinculada</span>
+                  )}
                 </div>
               </div>
 
@@ -456,7 +435,7 @@ export default function InboxPage() {
               <div className={styles.detailSection}>
                 <label className={styles.detailLabel}>Observações Internas</label>
                 <p className={styles.notesBox}>
-                  {activeConv.customer.notes || "Nenhuma anotação cadastrada."}
+                  {activeConv.customer.notes || "Nenhuma observação cadastrada."}
                 </p>
               </div>
 
