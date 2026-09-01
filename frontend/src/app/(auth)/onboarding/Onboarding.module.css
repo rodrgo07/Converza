@@ -1,0 +1,220 @@
+﻿.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background-color: var(--bg-main);
+}
+
+.wizardCard {
+  width: 100%;
+  max-width: 580px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.progressBar {
+  width: 100%;
+  height: 5px;
+  background-color: var(--bg-surface-secondary);
+}
+
+.progressFill {
+  height: 100%;
+  background-color: var(--brand-primary);
+  transition: width 0.3s ease;
+}
+
+.header {
+  padding: 32px 32px 20px 32px;
+  text-align: left;
+}
+
+.stepIndicator {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 6px;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.optionsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  padding: 0 32px 24px 32px;
+}
+
+.optionCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background-color: var(--bg-surface-secondary);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.optionCard:hover {
+  border-color: var(--brand-primary);
+  background-color: var(--bg-surface);
+}
+
+.optionCard.selected {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-primary-light);
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .optionCard.selected {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.optionIcon {
+  color: inherit;
+  display: flex;
+  align-items: center;
+}
+
+.optionLabel {
+  flex: 1;
+}
+
+.checkIcon {
+  color: var(--brand-primary);
+}
+
+.verticalOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 32px 24px 32px;
+}
+
+.verticalOptionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background-color: var(--bg-surface-secondary);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.verticalOptionCard:hover {
+  border-color: var(--brand-primary);
+  background-color: var(--bg-surface);
+}
+
+.verticalOptionCard.selected {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-primary-light);
+}
+
+[data-theme="dark"] .verticalOptionCard.selected {
+  background-color: rgba(16, 185, 129, 0.15);
+}
+
+.optionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.verticalOptionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.verticalOptionDesc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.footerNav {
+  padding: 20px 32px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-surface);
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.backBtn:hover {
+  background-color: var(--bg-surface-secondary);
+  color: var(--text-primary);
+}
+
+.nextBtn, .finishBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  background-color: var(--brand-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.nextBtn:hover, .finishBtn:hover:not(:disabled) {
+  background-color: var(--brand-primary-hover);
+  transform: translateY(-1px);
+}
+
+.finishBtn:disabled {
+  opacity: 0.7;
+}
+
+@media (max-width: 640px) {
+  .optionsGrid {
+    grid-template-columns: 1fr;
+  }
+}
