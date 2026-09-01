@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import Link from "next/link";
 import styles from "../privacidade/Legal.module.css";
 import { FileText, ArrowLeft } from "lucide-react";

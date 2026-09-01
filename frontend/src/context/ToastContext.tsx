@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { createContext, useContext, useState } from "react";
 import styles from "./Toast.module.css";

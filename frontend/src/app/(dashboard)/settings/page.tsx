@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -42,6 +42,11 @@ export default function SettingsPage() {
   // WhatsApp
   const [waAccount, setWaAccount] = useState<WhatsAppAccount | null>(null);
   const [isConnectingWa, setIsConnectingWa] = useState(false);
+  const [waPhoneId, setWaPhoneId] = useState("");
+  const [waWabaId, setWaWabaId] = useState("");
+  const [waDisplayPhone, setWaDisplayPhone] = useState("");
+  const [waVerifiedName, setWaVerifiedName] = useState("");
+  const [waAccessToken, setWaAccessToken] = useState("");
 
   // Subscription
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -62,8 +67,14 @@ export default function SettingsPage() {
 
   const loadWaStatus = async () => {
     try {
-      const data = await apiFetch<WhatsAppAccount>("/whatsapp/status");
-      setWaAccount(data);
+      const wa = await apiFetch<WhatsAppAccount>("/whatsapp/status");
+      setWaAccount(wa);
+      if (wa) {
+        setWaPhoneId(wa.phone_number_id || "");
+        setWaWabaId(wa.business_account_id || "");
+        setWaDisplayPhone(wa.display_phone_number || "");
+        setWaVerifiedName(wa.verified_name || "");
+      }
     } catch {
       // ignore
     }
@@ -106,28 +117,43 @@ export default function SettingsPage() {
     }
   };
 
-  const handleToggleWhatsApp = async () => {
+  const handleConnectWhatsApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waPhoneId || !waDisplayPhone) {
+      error("Preencha o Phone Number ID e o Número de WhatsApp.");
+      return;
+    }
+
     try {
       setIsConnectingWa(true);
-      if (waAccount?.is_connected) {
-        const disconnected = await apiFetch<WhatsAppAccount>("/whatsapp/disconnect", { method: "POST" });
-        setWaAccount(disconnected);
-        success("WhatsApp desconectado.");
-      } else {
-        const connected = await apiFetch<WhatsAppAccount>("/whatsapp/connect", {
-          method: "POST",
-          body: JSON.stringify({
-            phone_number_id: "10928374619283",
-            business_account_id: "8372619402918",
-            display_phone_number: "+55 11 98888-7777",
-            verified_name: company?.name || "Empresa Oficial",
-          }),
-        });
-        setWaAccount(connected);
-        success("WhatsApp Cloud API conectado com sucesso!");
-      }
+      const connected = await apiFetch<WhatsAppAccount>("/whatsapp/connect", {
+        method: "POST",
+        body: JSON.stringify({
+          phone_number_id: waPhoneId.trim(),
+          business_account_id: waWabaId.trim() || undefined,
+          display_phone_number: waDisplayPhone.trim(),
+          verified_name: waVerifiedName.trim() || company?.name || "Empresa Oficial",
+          access_token: waAccessToken.trim() || undefined,
+        }),
+      });
+      setWaAccount(connected);
+      setWaAccessToken(""); // Clear in UI for security
+      success("WhatsApp Cloud API conectado com sucesso!");
+    } catch (err: any) {
+      error(err.message || "Erro ao conectar WhatsApp Cloud API.");
+    } finally {
+      setIsConnectingWa(false);
+    }
+  };
+
+  const handleDisconnectWhatsApp = async () => {
+    try {
+      setIsConnectingWa(true);
+      const disconnected = await apiFetch<WhatsAppAccount>("/whatsapp/disconnect", { method: "POST" });
+      setWaAccount(disconnected);
+      success("WhatsApp desconectado com sucesso.");
     } catch {
-      error("Erro ao alterar conexão do WhatsApp.");
+      error("Erro ao desconectar WhatsApp.");
     } finally {
       setIsConnectingWa(false);
     }
@@ -218,38 +244,115 @@ export default function SettingsPage() {
                         <span style={{ color: "#ef4444", fontWeight: 700 }}>Desconectado</span>
                       )}
                     </div>
-                    <button
-                      onClick={handleToggleWhatsApp}
-                      disabled={isConnectingWa}
-                      className={waAccount?.is_connected ? styles.disconnectBtn : styles.connectBtn}
-                    >
-                      {waAccount?.is_connected ? "Desconectar Número" : "Conectar Número Agora"}
-                    </button>
+                    {waAccount?.is_connected && (
+                      <button
+                        onClick={handleDisconnectWhatsApp}
+                        disabled={isConnectingWa}
+                        className={styles.disconnectBtn}
+                      >
+                        Desconectar Número
+                      </button>
+                    )}
                   </div>
 
-                  {waAccount?.is_connected && (
+                  {waAccount?.is_connected ? (
                     <div className={styles.connectedDetails}>
                       <div className={styles.fieldItem}>
                         <span>Número Conectado:</span>
-                        <strong>{waAccount.display_phone_number || "+55 11 98888-7777"}</strong>
+                        <strong>{waAccount.display_phone_number || "Não informado"}</strong>
                       </div>
                       <div className={styles.fieldItem}>
-                        <span>Nome Verificado:</span>
+                        <span>Nome Verificado na Meta:</span>
                         <strong>{waAccount.verified_name || company?.name}</strong>
+                      </div>
+                      <div className={styles.fieldItem}>
+                        <span>Phone Number ID:</span>
+                        <code>{waAccount.phone_number_id || "Não configurado"}</code>
                       </div>
                       <div className={styles.fieldItem}>
                         <span>Webhook Verify Token:</span>
                         <code>{waAccount.webhook_verify_token}</code>
                       </div>
+                      <div className={styles.fieldItem}>
+                        <span>URL do Webhook (Meta):</span>
+                        <code>{typeof window !== "undefined" ? `${window.location.origin}/api/v1/webhooks/whatsapp` : "/api/v1/webhooks/whatsapp"}</code>
+                      </div>
                     </div>
+                  ) : (
+                    <form onSubmit={handleConnectWhatsApp} className={styles.connectForm}>
+                      <p className={styles.formDesc}>
+                        Insira as credenciais da sua conta no <strong>Meta for Developers / WhatsApp Cloud API</strong>:
+                      </p>
+
+                      <div className={styles.formGrid}>
+                        <div className={styles.formGroup}>
+                          <label>Phone Number ID (Meta)</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: 109283746192830"
+                            value={waPhoneId}
+                            onChange={(e) => setWaPhoneId(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>WhatsApp Business Account ID (WABA ID)</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: 837261940291823"
+                            value={waWabaId}
+                            onChange={(e) => setWaWabaId(e.target.value)}
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Número do WhatsApp Oficial</label>
+                          <input
+                            type="text"
+                            placeholder="+55 11 98765-4321"
+                            value={waDisplayPhone}
+                            onChange={(e) => setWaDisplayPhone(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div className={styles.formGroup}>
+                          <label>Nome de Exibição / Empresa</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Minha Loja Oficial"
+                            value={waVerifiedName}
+                            onChange={(e) => setWaVerifiedName(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label>Meta Temporary / Permanent Access Token (Bearer)</label>
+                        <input
+                          type="password"
+                          placeholder="EAAG..."
+                          value={waAccessToken}
+                          onChange={(e) => setWaAccessToken(e.target.value)}
+                        />
+                        <span className={styles.hint}>O token é armazenado de forma criptografada no backend e nunca trafega para o navegador.</span>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isConnectingWa}
+                        className={styles.connectBtn}
+                        style={{ marginTop: "12px" }}
+                      >
+                        {isConnectingWa ? "Conectando..." : "Salvar e Conectar WhatsApp Oficial"}
+                      </button>
+                    </form>
                   )}
                 </div>
 
                 <div className={styles.metaNotice}>
                   <Sparkles size={16} className={styles.metaIcon} />
                   <div>
-                    <strong>Integração Oficial de WhatsApp</strong>
-                    <p>Todas as mensagens enviadas e recebidas respeitam as diretrizes oficiais de entrega instantânea da Meta.</p>
+                    <strong>Integração Oficial de WhatsApp Cloud API</strong>
+                    <p>Todas as mensagens enviadas e recebidas respeitam as diretrizes oficiais da Meta Graph API v19.0 sem intermediários ou risco de banimento.</p>
                   </div>
                 </div>
               </div>

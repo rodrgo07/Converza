@@ -16,6 +16,25 @@ class WhatsAppProvider:
     def is_configured(self) -> bool:
         return bool(self.phone_number_id and self.access_token)
 
+    async def verify_credentials(self) -> Dict[str, Any]:
+        """
+        Tests the credentials with Meta Graph API before confirming connection.
+        """
+        if not self.phone_number_id or not self.access_token:
+            raise ValueError("Phone Number ID e Access Token são obrigatórios.")
+
+        headers = {'Authorization': f'Bearer {self.access_token}'}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                resp = await client.get(f'https://graph.facebook.com/{self.api_version}/{self.phone_number_id}', headers=headers)
+                data = resp.json()
+                if resp.status_code >= 400:
+                    err_detail = data.get("error", {}).get("message", "Credenciais inválidas na Meta.")
+                    raise ValueError(f"Meta Graph API rejeitou as credenciais: {err_detail}")
+                return data
+            except httpx.RequestError as exc:
+                raise ValueError(f"Não foi possível conectar aos servidores da Meta: {str(exc)}")
+
     async def send_text_message(self, to_phone: str, text: str) -> Dict[str, Any]:
         """
         Sends an outbound text message via Meta WhatsApp Cloud API.
