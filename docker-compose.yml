@@ -1,0 +1,25 @@
+﻿version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: converza-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./converza.db
+      - SECRET_KEY=converza-secret-super-key-2026-whatsapp-crm-brazil
+    volumes:
+      - ./backend/converza.db:/app/converza.db
+
+  frontend:
+    build: ./frontend
+    container_name: converza-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
