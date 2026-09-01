@@ -129,6 +129,12 @@
   font-weight: 600;
 }
 
+[data-theme="dark"] .disconnectBtn {
+  background-color: rgba(220, 38, 38, 0.15);
+  color: #fca5a5;
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
 .testBtn {
   display: flex;
   align-items: center;

@@ -1,6 +1,6 @@
 ﻿import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Add backend to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -46,7 +46,7 @@ def seed():
         max_users=3,
         max_customers=1000,
         price_cents=3990,
-        current_period_end=datetime.utcnow() + timedelta(days=28)
+        current_period_end=datetime.now(timezone.utc) + timedelta(days=28)
     )
     db.add(sub)
 
@@ -56,7 +56,7 @@ def seed():
         name='Rodrigo Alcantara',
         email='rodrigo@lojadodigo.com.br',
         phone='+55 11 98888-7777',
-        hashed_password=get_password_hash('senha123'),
+        hashed_password=get_password_hash('Converza2026!'),
         role=UserRole.ADMIN,
         onboarding_completed=True,
         theme_preference='system'
@@ -69,7 +69,7 @@ def seed():
         name='Juliana Vendedora',
         email='juliana@lojadodigo.com.br',
         phone='+55 11 97777-6666',
-        hashed_password=get_password_hash('senha123'),
+        hashed_password=get_password_hash('Converza2026!'),
         role=UserRole.SALES,
         onboarding_completed=True,
         theme_preference='system'
@@ -270,7 +270,7 @@ def seed():
             notes=item['notes'],
             total_spent=item['total_spent'],
             orders_count=item['orders_count'],
-            last_interaction=datetime.utcnow() - timedelta(minutes=15)
+            last_interaction=datetime.now(timezone.utc) - timedelta(minutes=15)
         )
         db.add(cust)
         db.flush()
@@ -286,7 +286,7 @@ def seed():
             title=item['opp_title'],
             value=item['opp_value'],
             probability=70,
-            expected_close_date=datetime.utcnow() + timedelta(days=7),
+            expected_close_date=datetime.now(timezone.utc) + timedelta(days=7),
             notes='Oportunidade gerada automaticamente via atendimento de WhatsApp.'
         )
         db.add(opp)
@@ -298,7 +298,7 @@ def seed():
             status='open',
             unread_count=item['unread'],
             last_message_text=item['last_msg'],
-            last_message_time=datetime.utcnow() - timedelta(minutes=25)
+            last_message_time=datetime.now(timezone.utc) - timedelta(minutes=25)
         )
         db.add(conv)
         db.flush()
@@ -310,7 +310,7 @@ def seed():
             direction=MessageDirection.INBOUND,
             message_type=MessageType.TEXT,
             content='Olá, vi o anúncio de vocês e queria mais informações!',
-            created_at=datetime.utcnow() - timedelta(hours=3)
+            created_at=datetime.now(timezone.utc) - timedelta(hours=3)
         )
         m2 = Message(
             conversation_id=conv.id,
@@ -318,7 +318,7 @@ def seed():
             direction=MessageDirection.OUTBOUND,
             message_type=MessageType.TEXT,
             content='Olá! Tudo bem? Que ótimo te receber aqui no nosso canal direto de WhatsApp. Vou te enviar nosso catálogo completo!',
-            created_at=datetime.utcnow() - timedelta(hours=2)
+            created_at=datetime.now(timezone.utc) - timedelta(hours=2)
         )
         m3 = Message(
             conversation_id=conv.id,
@@ -326,7 +326,7 @@ def seed():
             direction=MessageDirection.INBOUND,
             message_type=MessageType.TEXT,
             content=item['last_msg'],
-            created_at=datetime.utcnow() - timedelta(minutes=25)
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=25)
         )
         db.add_all([m1, m2, m3])
 
@@ -338,16 +338,16 @@ def seed():
                 assigned_user_id=item['assigned'].id,
                 title=f'Retornar {cust.name.split()[0]} sobre {item["opp_title"]}',
                 notes=f'Verificar se aprovou as opções e fechar link de pagamento.',
-                due_date=datetime.utcnow() + timedelta(hours=4),
+                due_date=datetime.now(timezone.utc) + timedelta(hours=4),
                 status=FollowUpStatus.PENDING
             )
             db.add(fu)
 
     # 9. Tasks
     tasks_demo = [
-        ('Confirmar envio do pedido #1042 pelo Sedex', 'Verificar código de rastreamento no Correios', datetime.utcnow() + timedelta(hours=2), admin_user.id),
-        ('Enviar catálogo de novos lançamentos de Setembro', 'Disparar mensagens para os clientes VIP', datetime.utcnow() + timedelta(days=1), sales_user.id),
-        ('Conferir pagamentos Pix pendentes no banco', 'Cruzar comprovantes com pedidos aprovados', datetime.utcnow() + timedelta(hours=5), admin_user.id)
+        ('Confirmar envio do pedido #1042 pelo Sedex', 'Verificar código de rastreamento no Correios', datetime.now(timezone.utc) + timedelta(hours=2), admin_user.id),
+        ('Enviar catálogo de novos lançamentos de Setembro', 'Disparar mensagens para os clientes VIP', datetime.now(timezone.utc) + timedelta(days=1), sales_user.id),
+        ('Conferir pagamentos Pix pendentes no banco', 'Cruzar comprovantes com pedidos aprovados', datetime.now(timezone.utc) + timedelta(hours=5), admin_user.id)
     ]
     for t_tit, t_desc, t_due, t_uid in tasks_demo:
         t = Task(
@@ -379,7 +379,7 @@ def seed():
         db.add(n)
 
     db.commit()
-    print('Seeding completed successfully! Default login: rodrigo@lojadodigo.com.br / senha123')
+    print('Seeding completed successfully! Default login: rodrigo@lojadodigo.com.br / Converza2026!')
     db.close()
 
 if __name__ == '__main__':

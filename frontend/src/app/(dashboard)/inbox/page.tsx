@@ -28,19 +28,21 @@ import {
   AlertCircle
 } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 export default function InboxPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { success, error } = useToast();
+  const searchParams = useSearchParams();
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
+  const selectedConvIdRef = useRef<number | null>(null);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [teamMembers, setTeamMembers] = useState<User[]>([]);
 
-  // Queue filter
   const [selectedQueue, setSelectedQueue] = useState<"all" | "mine" | "unassigned" | "waiting" | "resolved">("all");
   
   const [messageText, setMessageText] = useState("");
@@ -53,28 +55,43 @@ export default function InboxPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+
+  useEffect(() => {
+    selectedConvIdRef.current = selectedConvId;
+  }, [selectedConvId]);
+
+  useEffect(() => {
+    const convIdParam = searchParams.get("conv_id");
+    const custIdParam = searchParams.get("customer_id");
+    if (convIdParam) {
+      setSelectedConvId(Number(convIdParam));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchConversations();
-    fetchQuickReplies();
-    fetchTeamMembers();
   }, [selectedQueue]);
 
-  // Realtime WebSocket Connection with multi-tenant company isolation
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("converza_token") : null;
+    fetchQuickReplies();
+    fetchTeamMembers();
+  }, []);
+
+  const connectWebSocket = useCallback(() => {
     if (!token) return;
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.hostname;
-    // Backend default port 8000
     const wsUrl = `${protocol}//${host}:8000/ws?token=${token}`;
 
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;
 
     ws.onopen = () => {
-      // Ping interval to maintain connection alive
+      reconnectAttemptsRef.current = 0;
       const interval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "PING" }));
@@ -92,8 +109,7 @@ export default function InboxPage() {
           const newMsg: Message = data.message;
           const convUpdate: Conversation = data.conversation;
 
-          // Se a mensagem pertence à conversa atualmente aberta
-          if (newMsg.conversation_id === selectedConvId) {
+          if (newMsg.conversation_id === selectedConvIdRef.current) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id || (m.external_id && m.external_id === newMsg.external_id))) {
                 return prev;
@@ -102,7 +118,6 @@ export default function InboxPage() {
             });
           }
 
-          // Atualiza lista de conversas
           setConversations((prev) => {
             const exists = prev.some((c) => c.id === convUpdate.id);
             if (exists) {
@@ -123,7 +138,7 @@ export default function InboxPage() {
               c.id === conversation_id ? { ...c, assigned_user_id, version } : c
             )
           );
-          if (selectedConvId === conversation_id) {
+          if (selectedConvIdRef.current === conversation_id) {
             loadConversationDetails(conversation_id);
           }
         }
@@ -133,14 +148,36 @@ export default function InboxPage() {
     };
 
     ws.onerror = () => {
-      // fallback
+      // handled by onclose
     };
 
-    return () => {
+    ws.onclose = () => {
       if ((ws as any).pingInterval) clearInterval((ws as any).pingInterval);
-      ws.close();
+      socketRef.current = null;
+
+      const maxAttempts = 10;
+      const attempt = reconnectAttemptsRef.current;
+      if (attempt < maxAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+        reconnectAttemptsRef.current = attempt + 1;
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectWebSocket();
+        }, delay);
+      }
     };
-  }, [selectedConvId]);
+  }, [token]);
+
+  useEffect(() => {
+    connectWebSocket();
+    return () => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      reconnectAttemptsRef.current = 999;
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
+  }, [connectWebSocket]);
 
   useEffect(() => {
     if (selectedConvId) {
@@ -192,8 +229,9 @@ export default function InboxPage() {
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c))
       );
-    } catch (err: any) {
-      error("Erro ao carregar conversa.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao carregar conversa.";
+      error(msg);
     }
   };
 
@@ -210,8 +248,9 @@ export default function InboxPage() {
       setActiveConv(updated);
       setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       success("Você assumiu esta conversa com sucesso!");
-    } catch (err: any) {
-      error(err.message || "Erro ao assumir conversa.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao assumir conversa.";
+      error(msg);
     }
   };
 
@@ -231,8 +270,9 @@ export default function InboxPage() {
       setTransferNotes("");
       setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       success("Conversa transferida com sucesso!");
-    } catch (err: any) {
-      error(err.message || "Erro ao transferir conversa.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao transferir conversa.";
+      error(msg);
     }
   };
 
@@ -245,8 +285,9 @@ export default function InboxPage() {
       setActiveConv(updated);
       setConversations((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       success("Atendimento finalizado!");
-    } catch (err: any) {
-      error(err.message || "Erro ao finalizar atendimento.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao finalizar atendimento.";
+      error(msg);
     }
   };
 
@@ -274,8 +315,10 @@ export default function InboxPage() {
             : c
         )
       );
-    } catch (err: any) {
-      error(err.message || "Falha ao enviar mensagem.");
+    } catch (err: unknown) {
+      setMessageText(content);
+      const msg = err instanceof Error ? err.message : "Falha ao enviar mensagem.";
+      error(msg);
     } finally {
       setIsSending(false);
     }
@@ -326,6 +369,12 @@ export default function InboxPage() {
               Minhas
             </button>
             <button
+              className={`${styles.queueTab} ${selectedQueue === "waiting" ? styles.queueActive : ""}`}
+              onClick={() => setSelectedQueue("waiting")}
+            >
+              Aguardando
+            </button>
+            <button
               className={`${styles.queueTab} ${selectedQueue === "resolved" ? styles.queueActive : ""}`}
               onClick={() => setSelectedQueue("resolved")}
             >
@@ -356,9 +405,13 @@ export default function InboxPage() {
                   key={conv.id}
                   className={`${styles.convItem} ${isSelected ? styles.selected : ""}`}
                   onClick={() => setSelectedConvId(conv.id)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedConvId(conv.id); } }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Conversa com ${conv.customer?.name || "cliente"}`}
                 >
                   <div className={styles.avatarWrapper}>
-                    <div className={styles.convAvatar}>
+                    <div className={styles.convAvatar} aria-hidden="true">
                       {conv.customer?.name?.charAt(0) || "C"}
                     </div>
                     {conv.unread_count > 0 && (
@@ -388,7 +441,6 @@ export default function InboxPage() {
                       )}
                     </div>
 
-                    {/* Attendant Assignment Tag */}
                     <div className={styles.attendantTagRow}>
                       {conv.assigned_user ? (
                         <span className={isAssignedToMe ? styles.assignedToMeTag : styles.assignedOtherTag}>
@@ -419,10 +471,9 @@ export default function InboxPage() {
         <div className={styles.colChat}>
           {activeConv ? (
             <>
-              {/* Chat Header com Status de Atribuição e Ações Multiatendente */}
               <div className={styles.chatHeader}>
                 <div className={styles.chatHeaderUser}>
-                  <div className={styles.chatAvatar}>
+                  <div className={styles.chatAvatar} aria-hidden="true">
                     {activeConv.customer?.name?.charAt(0) || "C"}
                   </div>
                   <div>
@@ -476,7 +527,6 @@ export default function InboxPage() {
                 </div>
               </div>
 
-              {/* Chat Message Stream */}
               <div className={styles.messagesContainer}>
                 <div className={styles.encryptionNotice}>
                   🔒 Caixa compartilhada oficial conectada ao WhatsApp Cloud API
@@ -535,12 +585,11 @@ export default function InboxPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Quick Replies Floater */}
               {showQuickMenu && (
                 <div className={styles.quickRepliesMenu}>
                   <div className={styles.qrHeader}>
                     <span>Respostas Rápidas</span>
-                    <button onClick={() => setShowQuickMenu(false)}>✕</button>
+                    <button onClick={() => setShowQuickMenu(false)} aria-label="Fechar respostas rápidas">✕</button>
                   </div>
                   <div className={styles.qrList}>
                     {quickReplies.map((qr) => (
@@ -562,13 +611,14 @@ export default function InboxPage() {
                 </div>
               )}
 
-              {/* Chat Input Bar */}
               <form onSubmit={handleSendMessage} className={styles.inputBar}>
                 <button
                   type="button"
                   onClick={() => setShowQuickMenu(!showQuickMenu)}
                   className={`${styles.toolBtn} ${showQuickMenu ? styles.toolBtnActive : ""}`}
                   title="Respostas Rápidas"
+                  aria-label="Abrir respostas rápidas"
+                  aria-expanded={showQuickMenu}
                 >
                   <Zap size={18} />
                 </button>
@@ -591,6 +641,7 @@ export default function InboxPage() {
                   type="submit"
                   disabled={!messageText.trim() || isSending}
                   className={styles.sendBtn}
+                  aria-label="Enviar mensagem"
                 >
                   <Send size={16} />
                 </button>
@@ -609,7 +660,7 @@ export default function InboxPage() {
         {activeConv && activeConv.customer && (
           <div className={styles.colCustomer}>
             <div className={styles.customerHeader}>
-              <div className={styles.customerBigAvatar}>
+              <div className={styles.customerBigAvatar} aria-hidden="true">
                 {activeConv.customer.name.charAt(0)}
               </div>
               <h3 className={styles.customerName}>{activeConv.customer.name}</h3>
@@ -619,7 +670,6 @@ export default function InboxPage() {
             </div>
 
             <div className={styles.customerBody}>
-              {/* Tags */}
               <div className={styles.detailSection}>
                 <label className={styles.detailLabel}>Etiquetas</label>
                 <div className={styles.tagChips}>
@@ -639,7 +689,6 @@ export default function InboxPage() {
                 </div>
               </div>
 
-              {/* Contact Info */}
               <div className={styles.detailSection}>
                 <label className={styles.detailLabel}>Contato</label>
                 <div className={styles.infoRow}>
@@ -654,7 +703,6 @@ export default function InboxPage() {
                 )}
               </div>
 
-              {/* Commercial Metrics */}
               <div className={styles.detailSection}>
                 <label className={styles.detailLabel}>Métricas do Cliente</label>
                 <div className={styles.metricsGrid}>
@@ -673,7 +721,6 @@ export default function InboxPage() {
                 </div>
               </div>
 
-              {/* Notes */}
               <div className={styles.detailSection}>
                 <label className={styles.detailLabel}>Observações Internas</label>
                 <p className={styles.notesBox}>
@@ -681,7 +728,6 @@ export default function InboxPage() {
                 </p>
               </div>
 
-              {/* Quick Actions */}
               <div className={styles.sideActions}>
                 <Link
                   href={`/pipeline`}
@@ -691,11 +737,11 @@ export default function InboxPage() {
                   <span>Criar Oportunidade</span>
                 </Link>
                 <Link
-                  href={`/followups`}
+                  href={`/tasks`}
                   className={styles.sideActionBtn}
                 >
                   <Clock size={14} />
-                  <span>Agendar Follow-up</span>
+                  <span>Criar Tarefa</span>
                 </Link>
               </div>
             </div>
@@ -705,16 +751,24 @@ export default function InboxPage() {
 
       {/* Modal de Transferência de Conversa */}
       {showTransferModal && (
-        <div className={styles.modalBackdrop}>
-          <div className={styles.modalContent}>
-            <h3 className={styles.modalTitle}>Transferir Atendimento</h3>
+        <div
+          className={styles.modalBackdrop}
+          onClick={() => setShowTransferModal(false)}
+          onKeyDown={(e) => { if (e.key === "Escape") setShowTransferModal(false); }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="transfer-modal-title"
+        >
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.modalTitle} id="transfer-modal-title">Transferir Atendimento</h3>
             <p className={styles.modalDesc}>
               Selecione o atendente que continuará o atendimento através do mesmo número oficial de WhatsApp.
             </p>
 
             <div className={styles.modalFormGroup}>
-              <label>Selecione o Atendente</label>
+              <label htmlFor="transfer-target">Selecione o Atendente</label>
               <select
+                id="transfer-target"
                 className={styles.modalSelect}
                 value={transferTargetUserId || ""}
                 onChange={(e) => setTransferTargetUserId(Number(e.target.value))}
@@ -731,8 +785,9 @@ export default function InboxPage() {
             </div>
 
             <div className={styles.modalFormGroup}>
-              <label>Motivo / Observação da Transferência (Opcional)</label>
+              <label htmlFor="transfer-notes">Motivo / Observação da Transferência (Opcional)</label>
               <textarea
+                id="transfer-notes"
                 className={styles.modalTextarea}
                 placeholder="Ex: Cliente tem dúvidas financeiras sobre emissão de nota..."
                 value={transferNotes}

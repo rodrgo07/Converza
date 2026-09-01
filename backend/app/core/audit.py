@@ -1,8 +1,11 @@
 import json
+import logging
 from typing import Optional, Any
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models import AuditLog
+
+logger = logging.getLogger(__name__)
 
 def log_audit(
     db: Session,
@@ -28,5 +31,6 @@ def log_audit(
         )
         db.add(entry)
         db.commit()
-    except Exception:
+    except Exception as e:
         db.rollback()
+        logger.error(f"Audit log failed for action={action} company={company_id}: {e}")

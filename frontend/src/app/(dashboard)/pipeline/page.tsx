@@ -84,35 +84,34 @@ export default function PipelinePage() {
     const fromStageId = parseInt(fromStageIdStr, 10);
     if (fromStageId === targetStageId) return;
 
-    // Optimistic update
-    const sourceCol = columns.find((c) => c.stage.id === fromStageId);
-    const opp = sourceCol?.opportunities.find((o) => o.id === oppId);
-    if (!opp) return;
+    setColumns((prevColumns) => {
+      const sourceCol = prevColumns.find((c) => c.stage.id === fromStageId);
+      const opp = sourceCol?.opportunities.find((o) => o.id === oppId);
+      if (!opp) return prevColumns;
 
-    const updatedColumns = columns.map((col) => {
-      if (col.stage.id === fromStageId) {
-        const nextOpps = col.opportunities.filter((o) => o.id !== oppId);
-        return {
-          ...col,
-          opportunities: nextOpps,
-          count: nextOpps.length,
-          total_value: nextOpps.reduce((acc, curr) => acc + curr.value, 0),
-        };
-      }
-      if (col.stage.id === targetStageId) {
-        const updatedOpp = { ...opp, stage_id: targetStageId };
-        const nextOpps = [updatedOpp, ...col.opportunities];
-        return {
-          ...col,
-          opportunities: nextOpps,
-          count: nextOpps.length,
-          total_value: nextOpps.reduce((acc, curr) => acc + curr.value, 0),
-        };
-      }
-      return col;
+      return prevColumns.map((col) => {
+        if (col.stage.id === fromStageId) {
+          const nextOpps = col.opportunities.filter((o) => o.id !== oppId);
+          return {
+            ...col,
+            opportunities: nextOpps,
+            count: nextOpps.length,
+            total_value: nextOpps.reduce((acc, curr) => acc + curr.value, 0),
+          };
+        }
+        if (col.stage.id === targetStageId) {
+          const updatedOpp = { ...opp, stage_id: targetStageId };
+          const nextOpps = [updatedOpp, ...col.opportunities];
+          return {
+            ...col,
+            opportunities: nextOpps,
+            count: nextOpps.length,
+            total_value: nextOpps.reduce((acc, curr) => acc + curr.value, 0),
+          };
+        }
+        return col;
+      });
     });
-
-    setColumns(updatedColumns);
 
     try {
       await apiFetch(`/pipeline/opportunities/${oppId}`, {
@@ -153,8 +152,9 @@ export default function PipelinePage() {
       setOppValue("");
       setOppNotes("");
       loadKanban();
-    } catch (err: any) {
-      error(err.message || "Erro ao criar oportunidade.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao criar oportunidade.";
+      error(msg);
     } finally {
       setIsSaving(false);
     }

@@ -29,8 +29,9 @@ export default function RegisterPage() {
       setIsLoading(true);
       await register(name, email, password, phone, companyName);
       success("Conta criada com sucesso! Configure seu negócio a seguir.");
-    } catch (err: any) {
-      error(err.message || "Erro ao cadastrar.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao cadastrar.";
+      error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -101,6 +102,7 @@ export default function RegisterPage() {
                 placeholder="joao@seuemail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 required
               />
             </div>
@@ -116,6 +118,7 @@ export default function RegisterPage() {
                 placeholder="Mínimo 6 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
                 required
               />
             </div>

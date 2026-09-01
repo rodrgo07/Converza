@@ -1,8 +1,11 @@
 from typing import Dict, Any, Optional
 import logging
+import hashlib
+import hmac
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from app.db.session import get_db
 from app.core.config import settings
 from app.core.events import manager
@@ -15,6 +18,21 @@ from app.schemas import MessageOut, ConversationOut
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+def verify_meta_signature(request_body: bytes, signature_header: Optional[str], app_secret: Optional[str]) -> bool:
+    if not app_secret or not signature_header:
+        return False
+    try:
+        expected = "sha256=" + hmac.new(
+            app_secret.encode("utf-8"),
+            request_body,
+            hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature_header)
+    except Exception:
+        return False
+
+
 @router.get("/whatsapp")
 async def verify_webhook(
     hub_mode: Optional[str] = Query(None, alias="hub.mode"),
@@ -22,15 +40,10 @@ async def verify_webhook(
     hub_challenge: Optional[str] = Query(None, alias="hub.challenge"),
     db: Session = Depends(get_db)
 ):
-    """
-    Endpoint de verificação de Webhook exigido pela Meta/Facebook.
-    Valida se o hub.verify_token coincide com o token configurado no sistema ou de alguma empresa.
-    """
     if not hub_mode or not hub_verify_token:
         raise HTTPException(status_code=400, detail="Missing hub.mode or hub.verify_token parameters")
 
     if hub_mode == "subscribe":
-        # Check global verify token or company-specific verify token
         if hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN:
             return Response(content=hub_challenge or "", media_type="text/plain")
 
@@ -46,11 +59,14 @@ async def receive_webhook(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    """
-    Endpoint que recebe eventos reais de mensagens recebidas e status de entrega/leitura da Meta WhatsApp Cloud API.
-    Possui idempotência garantida através do ID único da mensagem (wamid).
-    Notifica atendentes conectados em tempo real via WebSocket.
-    """
+    body = await request.body()
+
+    signature_header = request.headers.get("X-Hub-Signature-256")
+    if settings.WHATSAPP_APP_SECRET:
+        if not verify_meta_signature(body, signature_header, settings.WHATSAPP_APP_SECRET):
+            logger.warning("Webhook signature verification failed — rejected request.")
+            return JSONResponse(status_code=403, content={"error": "Invalid signature"})
+
     try:
         payload = await request.json()
     except Exception:
@@ -67,22 +83,19 @@ async def receive_webhook(
             metadata = value.get("metadata", {})
             phone_number_id = metadata.get("phone_number_id")
 
-            # 1. Identificar a conta WhatsApp correspondente ao Phone Number ID
             wa_account = None
             if phone_number_id:
-                wa_account = db.query(WhatsAppAccount).filter(WhatsAppAccount.phone_number_id == phone_number_id).first()
+                wa_account = db.query(WhatsAppAccount).filter(
+                    WhatsAppAccount.phone_number_id == phone_number_id,
+                    WhatsAppAccount.is_connected == True
+                ).first()
 
             if not wa_account:
-                # Fallback: primeira conta conectada
-                wa_account = db.query(WhatsAppAccount).filter(WhatsAppAccount.is_connected == True).first()
-
-            if not wa_account:
-                logger.warning(f"Webhook recebido para phone_number_id={phone_number_id}, mas nenhuma conta encontrada.")
+                logger.warning(f"Webhook received for unknown phone_number_id={phone_number_id}. Skipping.")
                 continue
 
             company_id = wa_account.company_id
 
-            # 2. Processar Mensagens Recebidas (Inbound)
             messages = value.get("messages", [])
             contacts = value.get("contacts", [])
             contact_profile_name = ""
@@ -98,10 +111,8 @@ async def receive_webhook(
                 if not from_phone:
                     continue
 
-                # Normalizar telefone (com DDI +55 se aplicável)
                 phone_formatted = f"+{from_phone}" if not from_phone.startswith("+") else from_phone
 
-                # Extrair conteúdo baseado no tipo
                 content = ""
                 media_url = None
                 m_type = MessageType.TEXT
@@ -112,27 +123,25 @@ async def receive_webhook(
                 elif msg_type_str in ["image", "audio", "video", "document"]:
                     media_data = msg_item.get(msg_type_str, {})
                     content = media_data.get("caption", f"[{msg_type_str.upper()} recebido]")
-                    media_url = media_data.get("id") # media ID do WhatsApp
+                    media_url = media_data.get("id")
                     m_type = MessageType(msg_type_str)
                 else:
                     content = f"[{msg_type_str} message]"
 
-                # IDEMPOTÊNCIA: Verificar se a mensagem já foi salva anteriormente
                 existing_msg = db.query(Message).filter(Message.external_id == wamid).first()
                 if existing_msg:
-                    logger.info(f"Mensagem já processada anteriormente (idempotência): {wamid}")
+                    logger.info(f"Mensagem já processada (idempotência): {wamid}")
                     continue
 
                 now = datetime.now(timezone.utc)
 
-                # 3. Identificar ou Criar Cliente
                 customer = db.query(Customer).filter(
                     Customer.company_id == company_id,
                     Customer.phone == phone_formatted
                 ).first()
 
                 if not customer:
-                    customer_name = contact_profile_name or f"Lead WhatsApp ({phone_formatted[-4:]})"
+                    customer_name = contact_profile_name or f"Lead ({phone_formatted[-4:]})"
                     customer = Customer(
                         company_id=company_id,
                         name=customer_name,
@@ -143,7 +152,6 @@ async def receive_webhook(
                     db.add(customer)
                     db.flush()
 
-                # 4. Identificar ou Criar Conversa
                 conv = db.query(Conversation).filter(
                     Conversation.company_id == company_id,
                     Conversation.customer_id == customer.id
@@ -179,7 +187,6 @@ async def receive_webhook(
 
                 customer.last_interaction = now
 
-                # 5. Salvar Mensagem no Banco
                 new_msg = Message(
                     conversation_id=conv.id,
                     sender_id=None,
@@ -195,72 +202,87 @@ async def receive_webhook(
                 )
                 db.add(new_msg)
 
-                # Criar Notificação interna para a equipe
-                notif = Notification(
-                    company_id=company_id,
-                    user_id=customer.assigned_user_id or conv.assigned_user_id or 1,
-                    title=f"Nova mensagem de {customer.name}",
-                    message=content[:100],
-                    notification_type="message",
-                    link="/inbox",
-                    is_read=False
-                )
-                db.add(notif)
-                db.commit()
-                db.refresh(new_msg)
-                db.refresh(conv)
-
-                # 6. Realtime WebSocket Broadcast para todos os atendentes conectados
-                try:
-                    await manager.broadcast_to_company(
+                target_user_id = customer.assigned_user_id or conv.assigned_user_id
+                if target_user_id:
+                    notif = Notification(
                         company_id=company_id,
-                        event_type="NEW_MESSAGE",
-                        data={
-                            "message": MessageOut.model_validate(new_msg).model_dump(mode="json"),
-                            "conversation": ConversationOut.model_validate(conv).model_dump(mode="json")
-                        }
+                        user_id=target_user_id,
+                        title=f"Nova mensagem de {customer.name}",
+                        message=content[:100],
+                        notification_type="message",
+                        link="/inbox",
+                        is_read=False
                     )
-                except Exception as b_err:
-                    logger.warning(f"Erro no broadcast websocket: {b_err}")
+                    db.add(notif)
 
-            # 7. Processar Atualizações de Status (sent, delivered, read, failed)
             statuses = value.get("statuses", [])
             for st in statuses:
                 status_wamid = st.get("id")
-                status_val = st.get("status") # sent, delivered, read, failed
+                status_val = st.get("status")
 
                 if not status_wamid or not status_val:
                     continue
 
                 msg_to_update = db.query(Message).filter(Message.external_id == status_wamid).first()
                 if msg_to_update:
-                    if status_val == "sent":
-                        msg_to_update.status = MessageStatus.SENT
-                    elif status_val == "delivered":
-                        msg_to_update.status = MessageStatus.DELIVERED
-                    elif status_val == "read":
-                        msg_to_update.status = MessageStatus.READ
-                    elif status_val == "failed":
-                        msg_to_update.status = MessageStatus.FAILED
-                    db.commit()
-                    db.refresh(msg_to_update)
+                    status_map = {
+                        "sending": MessageStatus.SENDING,
+                        "sent": MessageStatus.SENT,
+                        "delivered": MessageStatus.DELIVERED,
+                        "read": MessageStatus.READ,
+                        "failed": MessageStatus.FAILED,
+                    }
+                    new_status = status_map.get(status_val)
+                    if new_status:
+                        msg_to_update.status = new_status
+                    if status_val == "failed":
+                        errors = st.get("errors", [])
+                        if errors:
+                            msg_to_update.error_message = str(errors[0].get("message", "Unknown error"))
 
-                    # Realtime Broadcast de Status
-                    try:
-                        conv = db.query(Conversation).filter(Conversation.id == msg_to_update.conversation_id).first()
-                        if conv:
-                            await manager.broadcast_to_company(
-                                company_id=conv.company_id,
-                                event_type="MESSAGE_STATUS_UPDATE",
-                                data={
-                                    "message_id": msg_to_update.id,
-                                    "external_id": msg_to_update.external_id,
-                                    "status": msg_to_update.status.value,
-                                    "conversation_id": conv.id
-                                }
-                            )
-                    except Exception as st_err:
-                        logger.warning(f"Erro no broadcast de status: {st_err}")
+            db.commit()
+
+            for msg_item in messages:
+                wamid = msg_item.get("id")
+                msg_obj = db.query(Message).filter(Message.external_id == wamid).first()
+                if not msg_obj:
+                    continue
+                conv = db.query(Conversation).filter(Conversation.id == msg_obj.conversation_id).first()
+                if not conv:
+                    continue
+                try:
+                    await manager.broadcast_to_company(
+                        company_id=conv.company_id,
+                        event_type="NEW_MESSAGE",
+                        data={
+                            "message": MessageOut.model_validate(msg_obj).model_dump(mode="json"),
+                            "conversation": ConversationOut.model_validate(conv).model_dump(mode="json")
+                        }
+                    )
+                except Exception as b_err:
+                    logger.warning(f"WebSocket broadcast error: {b_err}")
+
+            for st in statuses:
+                status_wamid = st.get("id")
+                if not status_wamid:
+                    continue
+                msg_to_update = db.query(Message).filter(Message.external_id == status_wamid).first()
+                if not msg_to_update:
+                    continue
+                try:
+                    conv = db.query(Conversation).filter(Conversation.id == msg_to_update.conversation_id).first()
+                    if conv:
+                        await manager.broadcast_to_company(
+                            company_id=conv.company_id,
+                            event_type="MESSAGE_STATUS_UPDATE",
+                            data={
+                                "message_id": msg_to_update.id,
+                                "external_id": msg_to_update.external_id,
+                                "status": msg_to_update.status.value,
+                                "conversation_id": conv.id
+                            }
+                        )
+                except Exception as st_err:
+                    logger.warning(f"Status broadcast error: {st_err}")
 
     return {"status": "success"}
-

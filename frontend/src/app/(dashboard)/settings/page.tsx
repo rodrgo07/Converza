@@ -139,8 +139,9 @@ export default function SettingsPage() {
       setWaAccount(connected);
       setWaAccessToken(""); // Clear in UI for security
       success("WhatsApp Cloud API conectado com sucesso!");
-    } catch (err: any) {
-      error(err.message || "Erro ao conectar WhatsApp Cloud API.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao conectar WhatsApp Cloud API.";
+      error(msg);
     } finally {
       setIsConnectingWa(false);
     }
@@ -246,8 +247,9 @@ export default function SettingsPage() {
                             } else {
                               error(res.message || "Erro no teste de conexão.");
                             }
-                          } catch (err: any) {
-                            error(err.message || "Falha ao testar conexão.");
+                          } catch (err: unknown) {
+                            const msg = err instanceof Error ? err.message : "Falha ao testar conexão.";
+                            error(msg);
                           }
                         }}
                         className={styles.testBtn}
@@ -306,7 +308,7 @@ export default function SettingsPage() {
                       </div>
                       <div className={styles.fieldItem}>
                         <span>Webhook Verify Token:</span>
-                        <code>{waAccount.webhook_verify_token}</code>
+                        <code>••••••••</code>
                       </div>
                       <div className={styles.fieldItem}>
                         <span>URL do Webhook (Meta):</span>

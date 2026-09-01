@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { User, Company } from "@/types";
 import { apiFetch, getApiUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -38,21 +38,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchMe = async (authToken: string) => {
     try {
-      const userData = await apiFetch<User>("/auth/me");
+      const userData = await apiFetch<User>("/auth/me", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       setUser(userData);
-      const companyData = await apiFetch<Company>("/company");
+      const companyData = await apiFetch<Company>("/company", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
       setCompany(companyData);
-    } catch (err) {
-      console.error("Auth check failed:", err);
+    } catch {
       localStorage.removeItem("converza_token");
       setToken(null);
       setUser(null);
+      setCompany(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const login = async (email: string, pass: string) => {
+  const login = useCallback(async (email: string, pass: string) => {
     const formData = new URLSearchParams();
     formData.append("username", email);
     formData.append("password", pass);
@@ -84,9 +88,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       router.push("/dashboard");
     }
-  };
+  }, [router]);
 
-  const register = async (
+  const register = useCallback(async (
     name: string,
     email: string,
     pass: string,
@@ -114,45 +118,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCompany(comp);
 
     router.push("/onboarding");
-  };
+  }, [router]);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("converza_token");
     setToken(null);
     setUser(null);
     setCompany(null);
     router.push("/login");
-  };
+  }, [router]);
 
-  const updateUser = (updated: Partial<User>) => {
-    if (user) {
-      setUser({ ...user, ...updated });
-    }
-  };
+  const updateUser = useCallback((updated: Partial<User>) => {
+    setUser((prev) => prev ? { ...prev, ...updated } : null);
+  }, []);
 
-  const refreshCompany = async () => {
+  const refreshCompany = useCallback(async () => {
     try {
       const c = await apiFetch<Company>("/company");
       setCompany(c);
     } catch {
       // ignore
     }
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    user,
+    company,
+    token,
+    isLoading,
+    login,
+    register,
+    logout,
+    updateUser,
+    refreshCompany,
+  }), [user, company, token, isLoading, login, register, logout, updateUser, refreshCompany]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        company,
-        token,
-        isLoading,
-        login,
-        register,
-        logout,
-        updateUser,
-        refreshCompany,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

@@ -25,8 +25,9 @@ export default function LoginPage() {
       setIsLoading(true);
       await login(email, password);
       success("Login efetuado com sucesso!");
-    } catch (err: any) {
-      error(err.message || "E-mail ou senha incorretos.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "E-mail ou senha incorretos.";
+      error(msg);
     } finally {
       setIsLoading(false);
     }
@@ -54,6 +55,7 @@ export default function LoginPage() {
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
                 required
               />
             </div>
@@ -72,6 +74,7 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
               />
             </div>

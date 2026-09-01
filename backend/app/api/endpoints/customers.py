@@ -68,9 +68,15 @@ def create_customer(
     db.flush()
 
     if customer_in.tag_ids:
+        valid_tags = db.query(Tag).filter(
+            Tag.id.in_(customer_in.tag_ids),
+            Tag.company_id == company.id
+        ).all()
+        valid_tag_ids = {t.id for t in valid_tags}
         for tid in customer_in.tag_ids:
-            ct = CustomerTag(customer_id=customer.id, tag_id=tid)
-            db.add(ct)
+            if tid in valid_tag_ids:
+                ct = CustomerTag(customer_id=customer.id, tag_id=tid)
+                db.add(ct)
 
     # Automatically create the real conversation thread in PostgreSQL
     conversation = Conversation(
@@ -122,8 +128,14 @@ def update_customer(
         tag_ids = update_data.pop('tag_ids')
         if tag_ids is not None:
             db.query(CustomerTag).filter(CustomerTag.customer_id == customer.id).delete()
+            valid_tags = db.query(Tag).filter(
+                Tag.id.in_(tag_ids),
+                Tag.company_id == customer.company_id
+            ).all()
+            valid_tag_ids = {t.id for t in valid_tags}
             for tid in tag_ids:
-                db.add(CustomerTag(customer_id=customer.id, tag_id=tid))
+                if tid in valid_tag_ids:
+                    db.add(CustomerTag(customer_id=customer.id, tag_id=tid))
 
     for field, value in update_data.items():
         setattr(customer, field, value)

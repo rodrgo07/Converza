@@ -64,7 +64,7 @@ export default function DashboardPage() {
         {/* Top Indicators - 100% Real from PostgreSQL */}
         <div className={styles.kpiGrid}>
           <Link href="/inbox" className={styles.kpiCard}>
-            <div className={styles.kpiIconWrapper} style={{ backgroundColor: "#eff6ff", color: "#3b82f6" }}>
+            <div className={styles.kpiIconWrapper}>
               <MessageSquare size={20} />
             </div>
             <div className={styles.kpiData}>
@@ -74,7 +74,7 @@ export default function DashboardPage() {
           </Link>
 
           <Link href="/customers" className={styles.kpiCard}>
-            <div className={styles.kpiIconWrapper} style={{ backgroundColor: "#f0fdf4", color: "#10b981" }}>
+            <div className={styles.kpiIconWrapper}>
               <Users size={20} />
             </div>
             <div className={styles.kpiData}>
@@ -84,7 +84,7 @@ export default function DashboardPage() {
           </Link>
 
           <Link href="/pipeline" className={styles.kpiCard}>
-            <div className={styles.kpiIconWrapper} style={{ backgroundColor: "#fdf4ff", color: "#c026d3" }}>
+            <div className={styles.kpiIconWrapper}>
               <Target size={20} />
             </div>
             <div className={styles.kpiData}>
@@ -94,7 +94,7 @@ export default function DashboardPage() {
           </Link>
 
           <div className={styles.kpiCard}>
-            <div className={styles.kpiIconWrapper} style={{ backgroundColor: "#ecfdf5", color: "#059669" }}>
+            <div className={styles.kpiIconWrapper}>
               <DollarSign size={20} />
             </div>
             <div className={styles.kpiData}>
@@ -103,8 +103,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <Link href="/followups" className={styles.kpiCard}>
-            <div className={styles.kpiIconWrapper} style={{ backgroundColor: "#fffbeb", color: "#d97706" }}>
+          <Link href="/tasks" className={styles.kpiCard}>
+            <div className={styles.kpiIconWrapper}>
               <CalendarClock size={20} />
             </div>
             <div className={styles.kpiData}>
@@ -159,19 +159,21 @@ export default function DashboardPage() {
             <div className={styles.chartContainer}>
               {metrics?.sales_chart_data && metrics.sales_chart_data.some((d) => d.vendas > 0) ? (
                 <div className={styles.chartBars}>
-                  {metrics.sales_chart_data.map((item) => {
+                  {(() => {
                     const max = Math.max(...metrics.sales_chart_data.map((i) => i.vendas), 100);
-                    const pct = Math.min(100, Math.max(10, (item.vendas / max) * 100));
-                    return (
-                      <div key={item.day} className={styles.barCol}>
-                        <span className={styles.barValue}>{formatCurrency(item.vendas)}</span>
-                        <div className={styles.barTrack}>
-                          <div className={styles.barFill} style={{ height: `${pct}%` }} />
+                    return metrics.sales_chart_data.map((item) => {
+                      const pct = Math.min(100, Math.max(10, (item.vendas / max) * 100));
+                      return (
+                        <div key={item.day} className={styles.barCol}>
+                          <span className={styles.barValue}>{formatCurrency(item.vendas)}</span>
+                          <div className={styles.barTrack}>
+                            <div className={styles.barFill} style={{ height: `${pct}%` }} />
+                          </div>
+                          <span className={styles.barLabel}>{item.day}</span>
                         </div>
-                        <span className={styles.barLabel}>{item.day}</span>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               ) : (
                 <div className={styles.emptyStateContainer}>
@@ -190,7 +192,7 @@ export default function DashboardPage() {
                 <h3 className={styles.cardTitle}>Você precisa retornar</h3>
                 <span className={styles.cardSubtitle}>Leads e orçamentos aguardando resposta</span>
               </div>
-              <Link href="/followups" className={styles.viewMoreLink}>
+              <Link href="/tasks" className={styles.viewMoreLink}>
                 Ver todos
               </Link>
             </div>
@@ -228,7 +230,7 @@ export default function DashboardPage() {
                   <CheckCircle size={32} className={styles.emptyIconGreen} />
                   <p className={styles.emptyTitle}>Nenhum follow-up pendente.</p>
                   <span className={styles.emptySub}>Mantenha seus clientes organizados agendando retornos.</span>
-                  <Link href="/followups" className={styles.emptyAddBtn}>
+                  <Link href="/tasks" className={styles.emptyAddBtn}>
                     <Plus size={14} />
                     <span>Agendar Follow-up</span>
                   </Link>

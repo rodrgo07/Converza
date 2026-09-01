@@ -96,13 +96,14 @@ class User(Base):
     is_online = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company', back_populates='users')
+    company = relationship('Company', back_populates='users', foreign_keys=[company_id])
     assigned_customers = relationship('Customer', back_populates='assigned_user')
     assigned_conversations = relationship('Conversation', back_populates='assigned_user', foreign_keys='Conversation.assigned_user_id')
     assigned_opportunities = relationship('Opportunity', back_populates='assigned_user')
     assigned_tasks = relationship('Task', back_populates='assigned_user')
     assigned_follow_ups = relationship('FollowUp', back_populates='assigned_user')
     notifications = relationship('Notification', back_populates='user', cascade='all, delete-orphan')
+    conversation_events = relationship('ConversationEvent', back_populates='user')
 
 class Tag(Base):
     __tablename__ = 'tags'
@@ -113,7 +114,7 @@ class Tag(Base):
     color = Column(String(50), default='#10B981')
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company', back_populates='tags')
+    company = relationship('Company', back_populates='tags', foreign_keys=[company_id])
     customer_tags = relationship('CustomerTag', back_populates='tag', cascade='all, delete-orphan')
 
 class Customer(Base):
@@ -133,8 +134,8 @@ class Customer(Base):
     last_purchase_date = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company', back_populates='customers')
-    assigned_user = relationship('User', back_populates='assigned_customers')
+    company = relationship('Company', back_populates='customers', foreign_keys=[company_id])
+    assigned_user = relationship('User', back_populates='assigned_customers', foreign_keys=[assigned_user_id])
     customer_tags = relationship('CustomerTag', back_populates='customer', cascade='all, delete-orphan')
     conversations = relationship('Conversation', back_populates='customer', cascade='all, delete-orphan')
     opportunities = relationship('Opportunity', back_populates='customer', cascade='all, delete-orphan')
@@ -148,8 +149,8 @@ class CustomerTag(Base):
     customer_id = Column(Integer, ForeignKey('customers.id', ondelete='CASCADE'), nullable=False)
     tag_id = Column(Integer, ForeignKey('tags.id', ondelete='CASCADE'), nullable=False)
 
-    customer = relationship('Customer', back_populates='customer_tags')
-    tag = relationship('Tag', back_populates='customer_tags')
+    customer = relationship('Customer', back_populates='customer_tags', foreign_keys=[customer_id])
+    tag = relationship('Tag', back_populates='customer_tags', foreign_keys=[tag_id])
 
 class PipelineStage(Base):
     __tablename__ = 'pipeline_stages'
@@ -161,7 +162,7 @@ class PipelineStage(Base):
     order = Column(Integer, default=0)
     color = Column(String(50), default='#10B981')
 
-    company = relationship('Company', back_populates='pipeline_stages')
+    company = relationship('Company', back_populates='pipeline_stages', foreign_keys=[company_id])
     opportunities = relationship('Opportunity', back_populates='stage', cascade='all, delete-orphan')
 
 class Opportunity(Base):
@@ -181,9 +182,9 @@ class Opportunity(Base):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     company = relationship('Company', back_populates='opportunities')
-    customer = relationship('Customer', back_populates='opportunities')
-    stage = relationship('PipelineStage', back_populates='opportunities')
-    assigned_user = relationship('User', back_populates='assigned_opportunities')
+    customer = relationship('Customer', back_populates='opportunities', foreign_keys=[customer_id])
+    stage = relationship('PipelineStage', back_populates='opportunities', foreign_keys=[stage_id])
+    assigned_user = relationship('User', back_populates='assigned_opportunities', foreign_keys=[assigned_user_id])
 
 class Conversation(Base):
     __tablename__ = 'conversations'
@@ -202,12 +203,12 @@ class Conversation(Base):
     version = Column(Integer, default=1)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company', back_populates='conversations')
-    customer = relationship('Customer', back_populates='conversations')
+    company = relationship('Company', back_populates='conversations', foreign_keys=[company_id])
+    customer = relationship('Customer', back_populates='conversations', foreign_keys=[customer_id])
     assigned_user = relationship('User', foreign_keys=[assigned_user_id], back_populates='assigned_conversations')
-    whatsapp_account = relationship('WhatsAppAccount', back_populates='conversations')
-    messages = relationship('Message', back_populates='conversation', cascade='all, delete-orphan', order_by='Message.created_at')
-    events = relationship('ConversationEvent', back_populates='conversation', cascade='all, delete-orphan', order_by='ConversationEvent.created_at')
+    whatsapp_account = relationship('WhatsAppAccount', back_populates='conversations', foreign_keys=[whatsapp_account_id])
+    messages = relationship('Message', back_populates='conversation', cascade='all, delete-orphan', order_by='Message.id')
+    events = relationship('ConversationEvent', back_populates='conversation', cascade='all, delete-orphan', order_by='ConversationEvent.id')
 
 class ConversationEvent(Base):
     __tablename__ = 'conversation_events'
@@ -221,7 +222,8 @@ class ConversationEvent(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     conversation = relationship('Conversation', back_populates='events')
-    user = relationship('User')
+    user = relationship('User', back_populates='conversation_events', foreign_keys=[user_id])
+    company = relationship('Company', foreign_keys=[company_id])
 
 class Message(Base):
     __tablename__ = 'messages'
@@ -241,8 +243,8 @@ class Message(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     conversation = relationship('Conversation', back_populates='messages')
-    sender = relationship('User')
-    whatsapp_account = relationship('WhatsAppAccount')
+    sender = relationship('User', foreign_keys=[sender_id])
+    whatsapp_account = relationship('WhatsAppAccount', foreign_keys=[whatsapp_account_id])
 
 class FollowUp(Base):
     __tablename__ = 'follow_ups'
@@ -258,8 +260,8 @@ class FollowUp(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     company = relationship('Company', back_populates='follow_ups')
-    customer = relationship('Customer', back_populates='follow_ups')
-    assigned_user = relationship('User', back_populates='assigned_follow_ups')
+    customer = relationship('Customer', back_populates='follow_ups', foreign_keys=[customer_id])
+    assigned_user = relationship('User', back_populates='assigned_follow_ups', foreign_keys=[assigned_user_id])
 
 class Task(Base):
     __tablename__ = 'tasks'
@@ -275,8 +277,8 @@ class Task(Base):
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     company = relationship('Company', back_populates='tasks')
-    customer = relationship('Customer', back_populates='tasks')
-    assigned_user = relationship('User', back_populates='assigned_tasks')
+    customer = relationship('Customer', back_populates='tasks', foreign_keys=[customer_id])
+    assigned_user = relationship('User', back_populates='assigned_tasks', foreign_keys=[assigned_user_id])
 
 class QuickReply(Base):
     __tablename__ = 'quick_replies'
@@ -313,7 +315,7 @@ class WhatsAppAccount(Base):
     def has_token_configured(self) -> bool:
         return bool(self.access_token)
 
-    company = relationship('Company', back_populates='whatsapp_accounts')
+    company = relationship('Company', back_populates='whatsapp_accounts', foreign_keys=[company_id])
     conversations = relationship('Conversation', back_populates='whatsapp_account')
 
 class Notification(Base):
@@ -329,8 +331,8 @@ class Notification(Base):
     link = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company', back_populates='notifications')
-    user = relationship('User', back_populates='notifications')
+    company = relationship('Company', back_populates='notifications', foreign_keys=[company_id])
+    user = relationship('User', back_populates='notifications', foreign_keys=[user_id])
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'
@@ -345,7 +347,7 @@ class Subscription(Base):
     current_period_end = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company', back_populates='subscription')
+    company = relationship('Company', back_populates='subscription', foreign_keys=[company_id])
 
 class AuditLog(Base):
     __tablename__ = 'audit_logs'
@@ -360,5 +362,5 @@ class AuditLog(Base):
     ip_address = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
-    company = relationship('Company')
-    user = relationship('User')
+    company = relationship('Company', foreign_keys=[company_id])
+    user = relationship('User', foreign_keys=[user_id])

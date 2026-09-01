@@ -1,12 +1,16 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
 from app.core.config import settings
-from app.db.session import engine, Base
-from app.models import *
+from app.db.session import SessionLocal
+from app.models import User
+from app.core.events import manager
+from jose import jwt
+import json
+import asyncio
+import logging
 
-from app.api.endpoints import (
-    auth, customers, conversations, pipeline, followups, tasks, extra_routers, webhooks
-)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -16,16 +20,20 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS configuration
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://converza.com.br",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://converza.com.br", "http://localhost:8000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
-# Security Headers Middleware
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     response = await call_next(request)
@@ -35,9 +43,13 @@ async def add_security_headers(request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
     return response
 
-# API Routers
+from app.api.endpoints import (
+    auth, customers, conversations, pipeline, followups, tasks, extra_routers, webhooks
+)
+
 api_v1 = settings.API_V1_STR
 app.include_router(auth.router, prefix=f"{api_v1}/auth", tags=["Auth"])
 app.include_router(customers.router, prefix=f"{api_v1}/customers", tags=["Customers"])
@@ -55,30 +67,15 @@ app.include_router(extra_routers.company_router, prefix=f"{api_v1}/company", tag
 app.include_router(extra_routers.dashboard_router, prefix=f"{api_v1}/dashboard", tags=["Dashboard"])
 app.include_router(extra_routers.reports_router, prefix=f"{api_v1}/reports", tags=["Reports"])
 app.include_router(webhooks.router, prefix=f"{api_v1}/webhooks", tags=["WhatsApp Webhook"])
-app.include_router(webhooks.router, prefix="/webhooks", tags=["WhatsApp Webhook Root"])
 
-# Realtime WebSocket & SSE Endpoints
-from fastapi import WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import StreamingResponse
-from app.core.events import manager
-from jose import jwt
-from app.core.config import settings
-from app.db.session import SessionLocal
-from app.models import User
-import json
-import asyncio
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
-    """
-    WebSocket em tempo real com autenticação JWT e isolamento multi-tenant por empresa (company_id).
-    Permite que múltiplos atendentes recebam novas mensagens e eventos instantaneamente.
-    """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = int(payload.get("sub"))
     except Exception:
-        await websocket.close(code=1008) # Policy Violation
+        await websocket.close(code=1008)
         return
 
     db = SessionLocal()
@@ -94,7 +91,6 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     await manager.connect(websocket, company_id)
     try:
         while True:
-            # Manter conexão viva recebendo pings/mensagens de presença do atendente
             data = await websocket.receive_text()
             try:
                 msg_data = json.loads(data)
@@ -107,22 +103,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
     except Exception:
         manager.disconnect(websocket, company_id)
 
+
 @app.get("/api/v1/realtime/events")
 async def sse_events(token: str = Query(...)):
-    """
-    Server-Sent Events (SSE) fallback para atualizações em tempo real.
-    """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = int(payload.get("sub"))
     except Exception:
-        return {"error": "Invalid token"}
+        return JSONResponse(status_code=401, content={"error": "Token inválido"})
 
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
-            return {"error": "User not found"}
+            return JSONResponse(status_code=401, content={"error": "Usuário não encontrado"})
         company_id = user.company_id
     finally:
         db.close()
@@ -137,7 +131,16 @@ async def sse_events(token: str = Query(...)):
         except asyncio.CancelledError:
             manager.unsubscribe_sse(company_id, queue)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
 
 @app.get("/")
 def root():
@@ -148,12 +151,12 @@ def root():
         "docs": "/docs"
     }
 
+
 @app.get("/health")
 def health_check():
     db_status = "connected"
     try:
         from sqlalchemy import text
-        from app.db.session import SessionLocal
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
@@ -165,4 +168,3 @@ def health_check():
         "database": db_status,
         "version": "1.0.0"
     }
-
