@@ -1,4 +1,4 @@
-﻿.toastContainer {
+.toastContainer {
   position: fixed;
   bottom: 24px;
   right: 24px;
@@ -49,9 +49,9 @@
 }
 
 .toastItem.info {
-  background-color: var(--color-surface, #ffffff);
-  color: var(--color-text, #1e293b);
-  border: 1px solid var(--color-border, #e2e8f0);
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--text-primary, #0f172a);
+  border: 1px solid var(--border-color, #e2e8f0);
 }
 
 .icon {

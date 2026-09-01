@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -6,7 +6,7 @@ import { useToast } from "@/context/ToastContext";
 import { apiFetch } from "@/lib/api";
 import { Task, Customer } from "@/types";
 import Header from "@/components/layout/Header";
-import styles from "../followups/Followups.module.css";
+import styles from "./Tasks.module.css";
 import { CheckSquare, Plus, Check, Calendar, X } from "lucide-react";
 
 export default function TasksPage() {
@@ -82,7 +82,7 @@ export default function TasksPage() {
 
       <div className={styles.content}>
         <div className={styles.topBar}>
-          <h3 style={{ fontSize: 16, fontWeight: 700 }}>Minhas Tarefas</h3>
+          <h3 className={styles.heading}>Minhas Tarefas</h3>
           <button onClick={() => setShowModal(true)} className={styles.addBtn}>
             <Plus size={16} />
             <span>Nova Tarefa</span>

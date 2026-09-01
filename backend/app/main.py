@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.session import engine, Base
@@ -8,7 +8,7 @@ from app.models import *
 Base.metadata.create_all(bind=engine)
 
 from app.api.endpoints import (
-    auth, customers, conversations, pipeline, followups, tasks, extra_routers
+    auth, customers, conversations, pipeline, followups, tasks, extra_routers, webhooks
 )
 
 app = FastAPI(
@@ -45,6 +45,8 @@ app.include_router(extra_routers.team_router, prefix=f"{api_v1}/team", tags=["Te
 app.include_router(extra_routers.company_router, prefix=f"{api_v1}/company", tags=["Company"])
 app.include_router(extra_routers.dashboard_router, prefix=f"{api_v1}/dashboard", tags=["Dashboard"])
 app.include_router(extra_routers.reports_router, prefix=f"{api_v1}/reports", tags=["Reports"])
+app.include_router(webhooks.router, prefix=f"{api_v1}/webhooks", tags=["WhatsApp Webhook"])
+app.include_router(webhooks.router, prefix="/webhooks", tags=["WhatsApp Webhook Root"])
 
 @app.get("/")
 def root():

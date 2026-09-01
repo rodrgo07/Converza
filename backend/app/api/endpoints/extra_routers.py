@@ -1,4 +1,4 @@
-﻿from typing import List, Optional
+from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -219,6 +219,17 @@ def add_team_member(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail='Apenas administradores ou gerentes podem adicionar usuários.')
 
+    # Rule: Plan max users validation
+    sub = db.query(Subscription).filter(Subscription.company_id == company.id).first()
+    max_users_allowed = sub.max_users if sub else 1
+    current_users_count = db.query(User).filter(User.company_id == company.id).count()
+
+    if current_users_count >= max_users_allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f'Limite do plano atingido ({max_users_allowed} usuários). Faça upgrade da assinatura para adicionar mais membros.'
+        )
+
     existing = db.query(User).filter(User.email == user_in.email.lower()).first()
     if existing:
         raise HTTPException(status_code=400, detail='E-mail já cadastrado.')
@@ -261,6 +272,26 @@ def update_team_member(
     db.commit()
     db.refresh(member)
     return member
+
+@team_router.delete('/{user_id}')
+def delete_team_member(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail='Apenas administradores podem remover membros da equipe.')
+
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail='Você não pode remover seu próprio usuário administrador.')
+
+    member = db.query(User).filter(User.id == user_id, User.company_id == current_user.company_id).first()
+    if not member:
+        raise HTTPException(status_code=404, detail='Usuário não encontrado.')
+
+    db.delete(member)
+    db.commit()
+    return {'message': 'Membro removido da equipe com sucesso.'}
 
 # COMPANY ROUTER
 company_router = APIRouter()

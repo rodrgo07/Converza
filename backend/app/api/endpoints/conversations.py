@@ -1,4 +1,4 @@
-﻿from typing import List, Optional
+from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -59,7 +59,13 @@ async def send_message(
     if not conv:
         raise HTTPException(status_code=404, detail='Conversa não encontrada.')
 
-    customer = db.query(Customer).filter(Customer.id == conv.customer_id).first()
+    customer = db.query(Customer).filter(
+        Customer.id == conv.customer_id,
+        Customer.company_id == current_user.company_id
+    ).first()
+    if not customer or not customer.phone:
+        raise HTTPException(status_code=400, detail='Cliente não possui telefone cadastrado para envio.')
+
     wa_account = db.query(WhatsAppAccount).filter(WhatsAppAccount.company_id == current_user.company_id).first()
 
     provider = WhatsAppProvider(
@@ -67,10 +73,22 @@ async def send_message(
         access_token=wa_account.access_token if wa_account else None
     )
 
-    if msg_in.message_type == MessageType.TEXT:
-        await provider.send_text_message(customer.phone if customer else "", msg_in.content)
-    else:
-        await provider.send_media_message(customer.phone if customer else "", msg_in.message_type.value, msg_in.media_url or '', msg_in.content)
+    external_msg_id = None
+    try:
+        if msg_in.message_type == MessageType.TEXT:
+            res = await provider.send_text_message(customer.phone, msg_in.content)
+        else:
+            res = await provider.send_media_message(customer.phone, msg_in.message_type.value, msg_in.media_url or '', msg_in.content)
+        
+        # Capture Meta wamid if returned
+        messages_list = res.get("messages", [])
+        if messages_list and isinstance(messages_list, list) and "id" in messages_list[0]:
+            external_msg_id = messages_list[0]["id"]
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail={"code": "WHATSAPP_NOT_CONNECTED", "message": str(ve)})
+    except RuntimeError as re:
+        raise HTTPException(status_code=502, detail={"code": "WHATSAPP_API_ERROR", "message": str(re)})
 
     now = datetime.now(timezone.utc)
     new_msg = Message(
@@ -81,6 +99,7 @@ async def send_message(
         content=msg_in.content,
         media_url=msg_in.media_url,
         status=MessageStatus.SENT,
+        external_id=external_msg_id,
         created_at=now
     )
     db.add(new_msg)

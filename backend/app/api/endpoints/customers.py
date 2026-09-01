@@ -1,9 +1,12 @@
-﻿from typing import List, Optional
+from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models import Customer, CustomerTag, Tag, User, Conversation, Message, MessageDirection, MessageType, MessageStatus
+from app.models import (
+    Customer, CustomerTag, Tag, User, Conversation, Message,
+    MessageDirection, MessageType, MessageStatus, Company, Subscription
+)
 from app.schemas import CustomerCreate, CustomerUpdate, CustomerOut
 from app.api.deps import get_current_user, get_current_company
 
@@ -35,11 +38,23 @@ def get_customers(
 def create_customer(
     customer_in: CustomerCreate,
     current_user: User = Depends(get_current_user),
+    company: Company = Depends(get_current_company),
     db: Session = Depends(get_db)
 ):
+    # Rule: Plan max customers validation
+    sub = db.query(Subscription).filter(Subscription.company_id == company.id).first()
+    max_allowed = sub.max_customers if sub else 100
+    current_count = db.query(Customer).filter(Customer.company_id == company.id).count()
+
+    if current_count >= max_allowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f'Limite do plano atingido ({max_allowed} clientes). Faça upgrade da sua assinatura para cadastrar mais clientes.'
+        )
+
     now = datetime.now(timezone.utc)
     customer = Customer(
-        company_id=current_user.company_id,
+        company_id=company.id,
         name=customer_in.name,
         phone=customer_in.phone,
         email=customer_in.email,
