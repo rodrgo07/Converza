@@ -277,6 +277,10 @@ class WhatsAppAccount(Base):
     status = Column(String(50), default='disconnected') # connected, disconnected, pending
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    @property
+    def has_token_configured(self) -> bool:
+        return bool(self.access_token)
+
     company = relationship('Company', back_populates='whatsapp_accounts')
 
 class Notification(Base):
@@ -309,3 +313,19 @@ class Subscription(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     company = relationship('Company', back_populates='subscription')
+
+class AuditLog(Base):
+    __tablename__ = 'audit_logs'
+
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    action = Column(String(100), nullable=False) # e.g. LOGIN, CUSTOMER_DELETE, DATA_EXPORT, USER_ADD
+    resource = Column(String(100), nullable=True)
+    resource_id = Column(String(100), nullable=True)
+    details = Column(Text, nullable=True)
+    ip_address = Column(String(100), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    company = relationship('Company')
+    user = relationship('User')

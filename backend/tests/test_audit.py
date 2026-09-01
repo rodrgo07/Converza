@@ -1,30 +1,14 @@
 ﻿import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from app.main import app
-from app.db.session import Base, get_db
 from app.core.security import get_password_hash
-from app.models import Company, User, Subscription, Customer, PipelineStage, Opportunity, Conversation, Message, WhatsAppAccount, UserRole, MessageDirection, MessageType, MessageStatus
+from app.models import Company, User, Subscription, Customer, PipelineStage, Conversation, WhatsAppAccount, UserRole
+from tests.conftest import TestingSessionLocal
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_audit.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_database():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+def setup_audit_data():
     db = TestingSessionLocal()
 
     # Company 1
@@ -81,26 +65,28 @@ def test_multi_tenant_isolation_customers():
     token_alfa = get_auth_token("admin@alfa.com")
     token_beta = get_auth_token("admin@beta.com")
 
-    # Alfa list should only contain Alfa customers
     resp_alfa = client.get("/api/v1/customers/", headers={"Authorization": f"Bearer {token_alfa}"})
     assert resp_alfa.status_code == 200
     names = [c["name"] for c in resp_alfa.json()]
     assert "Cliente Alfa 1" in names
     assert "Cliente Beta Secreto" not in names
 
-    # Alfa trying to access Beta customer directly -> MUST Return 404 (Not accessible)
-    resp_cross = client.get("/api/v1/customers/2", headers={"Authorization": f"Bearer {token_alfa}"})
+    # Finding ID of Beta Customer
+    resp_beta = client.get("/api/v1/customers/", headers={"Authorization": f"Bearer {token_beta}"})
+    beta_cust_id = [c["id"] for c in resp_beta.json() if c["name"] == "Cliente Beta Secreto"][0]
+
+    # Alfa trying to access Beta customer -> MUST Return 404
+    resp_cross = client.get(f"/api/v1/customers/{beta_cust_id}", headers={"Authorization": f"Bearer {token_alfa}"})
     assert resp_cross.status_code == 404
 
     # Alfa trying to delete Beta customer -> MUST Return 404
-    resp_cross_del = client.delete("/api/v1/customers/2", headers={"Authorization": f"Bearer {token_alfa}"})
+    resp_cross_del = client.delete(f"/api/v1/customers/{beta_cust_id}", headers={"Authorization": f"Bearer {token_alfa}"})
     assert resp_cross_del.status_code == 404
 
 # 3. PLAN LIMITS TESTS (BACKEND ENFORCEMENT)
 def test_plan_limits_customers_and_users():
     token_alfa = get_auth_token("admin@alfa.com")
 
-    # Alfa limit is 2 customers (currently has 1)
     # Add 2nd customer (Allowed)
     r1 = client.post("/api/v1/customers/", json={"name": "Cliente Alfa 2", "phone": "+5511999990003"}, headers={"Authorization": f"Bearer {token_alfa}"})
     assert r1.status_code == 200
@@ -110,25 +96,21 @@ def test_plan_limits_customers_and_users():
     assert r2.status_code == 403
     assert "Limite do plano atingido" in r2.json()["detail"]
 
-    # Alfa limit is 1 user (already has Admin)
-    # Trying to add 2nd user -> 403 Forbidden
+    # Add 2nd user on free plan (Exceeds limit -> 403 Forbidden)
     r_user = client.post("/api/v1/team/", json={"name": "Vendedor Extra", "email": "extra@alfa.com", "password": "123"}, headers={"Authorization": f"Bearer {token_alfa}"})
     assert r_user.status_code == 403
     assert "Limite do plano atingido" in r_user.json()["detail"]
 
 # 4. WHATSAPP WEBHOOK VERIFICATION TEST
 def test_whatsapp_webhook_verification():
-    # Correct verify token
     resp = client.get("/api/v1/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=converza_verify_token_2026&hub.challenge=CHALLENGE_ACCEPTED_123")
     assert resp.status_code == 200
     assert resp.text == "CHALLENGE_ACCEPTED_123"
 
-    # Company specific token
     resp_co = client.get("/api/v1/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=converza_token_alfa&hub.challenge=COMPANY_CHALLENGE_789")
     assert resp_co.status_code == 200
     assert resp_co.text == "COMPANY_CHALLENGE_789"
 
-    # Invalid token
     resp_invalid = client.get("/api/v1/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=wrong_token&hub.challenge=FAIL")
     assert resp_invalid.status_code == 403
 
@@ -162,7 +144,6 @@ def test_whatsapp_webhook_inbound_message_and_idempotency():
         }]
     }
 
-    # 1st time received -> Customer created, Conversation created, Message saved
     r1 = client.post("/api/v1/webhooks/whatsapp", json=inbound_payload)
     assert r1.status_code == 200
 
@@ -172,7 +153,7 @@ def test_whatsapp_webhook_inbound_message_and_idempotency():
     assert len(matched) == 1
     assert matched[0]["last_message_text"] == "Olá! Gostaria de saber os preços do catálogo."
 
-    # 2nd time received (Duplicate Webhook delivery) -> MUST NOT duplicate message (Idempotency)
+    # Duplicate Webhook delivery -> MUST NOT duplicate
     r2 = client.post("/api/v1/webhooks/whatsapp", json=inbound_payload)
     assert r2.status_code == 200
 

@@ -331,23 +331,24 @@ class QuickReplyOut(QuickReplyBase):
     class Config:
         from_attributes = True
 
-# WhatsApp Account
-class WhatsAppAccountBase(BaseModel):
+class WhatsAppConnectRequest(BaseModel):
     phone_number_id: Optional[str] = None
     business_account_id: Optional[str] = None
     display_phone_number: Optional[str] = None
     verified_name: Optional[str] = None
     access_token: Optional[str] = None
 
-class WhatsAppConnectRequest(WhatsAppAccountBase):
-    pass
-
-class WhatsAppAccountOut(WhatsAppAccountBase):
+class WhatsAppAccountOut(BaseModel):
     id: int
     company_id: int
+    phone_number_id: Optional[str] = None
+    business_account_id: Optional[str] = None
+    display_phone_number: Optional[str] = None
+    verified_name: Optional[str] = None
     is_connected: bool
     status: str
     webhook_verify_token: str
+    has_token_configured: bool = False
     created_at: datetime
 
     class Config:
