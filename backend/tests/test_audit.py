@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.security import get_password_hash
@@ -190,3 +190,87 @@ def test_whatsapp_webhook_status_update():
     matched = [c for c in convs if c["customer"]["name"] == "Fernanda Nova Compradora"]
     conv_detail = client.get(f"/api/v1/conversations/{matched[0]['id']}", headers={"Authorization": f"Bearer {token_alfa}"}).json()
     assert conv_detail["messages"][0]["status"] == "read"
+
+# 7. MULTI-ATTENDANT TESTS: ASSIGNMENT, TRANSFER, OPTIMISTIC LOCKING
+def test_multi_attendant_assignment_and_transfer():
+    db = TestingSessionLocal()
+    c2 = db.query(Company).filter(Company.name == "Empresa Beta").first()
+    
+    # Criar 2 atendentes adicionais na Empresa Beta
+    u_maria = User(company_id=c2.id, name="Maria Atendente", email="maria@beta.com", hashed_password=get_password_hash("pass123"), role=UserRole.SALES)
+    u_carlos = User(company_id=c2.id, name="Carlos Atendente", email="carlos@beta.com", hashed_password=get_password_hash("pass123"), role=UserRole.SUPPORT)
+    db.add(u_maria)
+    db.add(u_carlos)
+
+    cust2 = db.query(Customer).filter(Customer.company_id == c2.id).first()
+    conv2 = Conversation(company_id=c2.id, customer_id=cust2.id, status="open", queue="unassigned")
+    db.add(conv2)
+    db.commit()
+    maria_id = u_maria.id
+    carlos_id = u_carlos.id
+    conv_id = conv2.id
+    db.close()
+
+    token_admin = get_auth_token("admin@beta.com")
+    token_maria = get_auth_token("maria@beta.com")
+    token_carlos = get_auth_token("carlos@beta.com")
+
+    # Obter conversa de Beta
+    target_conv = client.get(f"/api/v1/conversations/{conv_id}", headers={"Authorization": f"Bearer {token_maria}"}).json()
+
+    # 1. Maria assume o atendimento
+    r_assign = client.post(
+        f"/api/v1/conversations/{conv_id}/assign",
+        json={"assigned_user_id": maria_id, "expected_version": target_conv["version"]},
+        headers={"Authorization": f"Bearer {token_maria}"}
+    )
+    assert r_assign.status_code == 200
+    assigned_data = r_assign.json()
+    assert assigned_data["assigned_user_id"] == maria_id
+    assert len(assigned_data["events"]) >= 1
+    assert "Maria Atendente" in assigned_data["events"][-1]["description"]
+
+    # 2. Carlos visualiza a mesma conversa e vê que Maria é a responsável
+    r_carlos_view = client.get(f"/api/v1/conversations/{conv_id}", headers={"Authorization": f"Bearer {token_carlos}"})
+    assert r_carlos_view.status_code == 200
+    assert r_carlos_view.json()["assigned_user"]["name"] == "Maria Atendente"
+
+    # 3. Concorrência / Optimistic locking: tentar alterar com versão defasada
+    r_conflict = client.post(
+        f"/api/v1/conversations/{conv_id}/assign",
+        json={"assigned_user_id": carlos_id, "expected_version": target_conv["version"]}, # Versão antiga
+        headers={"Authorization": f"Bearer {token_carlos}"}
+    )
+    assert r_conflict.status_code == 409
+
+    # 4. Maria transfere para Carlos com nota
+    new_version = assigned_data["version"]
+    r_transfer = client.post(
+        f"/api/v1/conversations/{conv_id}/transfer",
+        json={"target_user_id": carlos_id, "notes": "Cliente precisa de suporte técnico", "expected_version": new_version},
+        headers={"Authorization": f"Bearer {token_maria}"}
+    )
+    assert r_transfer.status_code == 200
+    transf_data = r_transfer.json()
+    assert transf_data["assigned_user_id"] == carlos_id
+    assert "transferida por Maria Atendente para Carlos Atendente" in transf_data["events"][-1]["description"]
+    assert "suporte técnico" in transf_data["events"][-1]["description"]
+
+# 8. TEST RBAC PERMISSIONS ENFORCEMENT
+def test_rbac_permissions():
+    token_sales = get_auth_token("maria@beta.com")
+    
+    # Atendente de vendas tentando desconectar WhatsApp -> 403 Proibido
+    resp = client.post("/api/v1/whatsapp/disconnect", headers={"Authorization": f"Bearer {token_sales}"})
+    assert resp.status_code == 403
+    assert "whatsapp.disconnect" in resp.json()["detail"]
+
+# 9. TEST TEST-CONNECTION REAL GRAPH API ENDPOINT
+def test_whatsapp_test_connection_endpoint():
+    token_admin = get_auth_token("admin@alfa.com")
+    resp = client.post("/api/v1/whatsapp/test-connection", headers={"Authorization": f"Bearer {token_admin}"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "success" in data
+    assert "status" in data
+

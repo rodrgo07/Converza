@@ -228,10 +228,47 @@ export default function SettingsPage() {
             {/* WHATSAPP TAB */}
             {activeTab === "whatsapp" && (
               <div className={styles.tabBody}>
-                <h3 className={styles.tabTitle}>WhatsApp Business Platform (Cloud API)</h3>
-                <p className={styles.tabSubtitle}>
-                  Conexão 100% oficial e segura diretamente com a Meta. Sem risco de banimento.
-                </p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+                  <div>
+                    <h3 className={styles.tabTitle}>WhatsApp Business Platform (Cloud API Oficial Meta)</h3>
+                    <p className={styles.tabSubtitle}>
+                      Conexão 100% oficial e segura diretamente com a Meta. Sem QR Code, sem emuladores e sem risco de banimento.
+                    </p>
+                  </div>
+                  {waAccount?.is_connected && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await apiFetch<{ success: boolean; status: string; message: string; display_phone_number?: string; verified_name?: string; quality_rating?: string }>("/whatsapp/test-connection", { method: "POST" });
+                            if (res.success) {
+                              success(`WhatsApp Conectado! Número: ${res.display_phone_number || "Ativo"} • Qualidade: ${res.quality_rating || "GREEN"}`);
+                            } else {
+                              error(res.message || "Erro no teste de conexão.");
+                            }
+                          } catch (err: any) {
+                            error(err.message || "Falha ao testar conexão.");
+                          }
+                        }}
+                        className={styles.testBtn}
+                      >
+                        <Sparkles size={14} />
+                        Testar Conexão
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Tem certeza que deseja desconectar o WhatsApp?\n\nAs novas mensagens deixarão de ser processadas pelo Converza.")) {
+                            handleDisconnectWhatsApp();
+                          }
+                        }}
+                        disabled={isConnectingWa}
+                        className={styles.disconnectBtn}
+                      >
+                        Desconectar Número
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <div className={styles.statusBox}>
                   <div className={styles.statusRow}>
@@ -245,13 +282,7 @@ export default function SettingsPage() {
                       )}
                     </div>
                     {waAccount?.is_connected && (
-                      <button
-                        onClick={handleDisconnectWhatsApp}
-                        disabled={isConnectingWa}
-                        className={styles.disconnectBtn}
-                      >
-                        Desconectar Número
-                      </button>
+                      <span className={styles.badgeSuccess}>Oficial Meta Cloud API</span>
                     )}
                   </div>
 
@@ -270,6 +301,10 @@ export default function SettingsPage() {
                         <code>{waAccount.phone_number_id || "Não configurado"}</code>
                       </div>
                       <div className={styles.fieldItem}>
+                        <span>Mensagens & Multiatendentes:</span>
+                        <strong style={{ color: "#10b981" }}>Ativas (Caixa Compartilhada)</strong>
+                      </div>
+                      <div className={styles.fieldItem}>
                         <span>Webhook Verify Token:</span>
                         <code>{waAccount.webhook_verify_token}</code>
                       </div>
@@ -280,9 +315,15 @@ export default function SettingsPage() {
                     </div>
                   ) : (
                     <form onSubmit={handleConnectWhatsApp} className={styles.connectForm}>
-                      <p className={styles.formDesc}>
-                        Insira as credenciais da sua conta no <strong>Meta for Developers / WhatsApp Cloud API</strong>:
-                      </p>
+                      <div className={styles.onboardingBanner}>
+                        <strong>Como conectar seu WhatsApp Oficial:</strong>
+                        <ol style={{ paddingLeft: 18, marginTop: 6, fontSize: 12.5, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                          <li>Acesse sua conta no <strong>Meta for Developers / WhatsApp Business Platform</strong>.</li>
+                          <li>Selecione ou adicione seu aplicativo e número de telefone comercial.</li>
+                          <li>Informe abaixo o <strong>Phone Number ID</strong> e o <strong>Access Token</strong> permanente do sistema.</li>
+                          <li>O backend do Converza validará as credenciais em tempo real com a Meta Graph API.</li>
+                        </ol>
+                      </div>
 
                       <div className={styles.formGrid}>
                         <div className={styles.formGroup}>
@@ -326,14 +367,14 @@ export default function SettingsPage() {
                       </div>
 
                       <div className={styles.formGroup}>
-                        <label>Meta Temporary / Permanent Access Token (Bearer)</label>
+                        <label>Meta Access Token (Bearer Token)</label>
                         <input
                           type="password"
                           placeholder="EAAG..."
                           value={waAccessToken}
                           onChange={(e) => setWaAccessToken(e.target.value)}
                         />
-                        <span className={styles.hint}>O token é armazenado de forma criptografada no backend e nunca trafega para o navegador.</span>
+                        <span className={styles.hint}>O token é mantido estritamente no backend e NUNCA é exposto no navegador ou retornado na API.</span>
                       </div>
 
                       <button
@@ -342,7 +383,7 @@ export default function SettingsPage() {
                         className={styles.connectBtn}
                         style={{ marginTop: "12px" }}
                       >
-                        {isConnectingWa ? "Conectando..." : "Salvar e Conectar WhatsApp Oficial"}
+                        {isConnectingWa ? "Verificando com a Meta..." : "Salvar e Conectar WhatsApp Oficial"}
                       </button>
                     </form>
                   )}
@@ -351,8 +392,8 @@ export default function SettingsPage() {
                 <div className={styles.metaNotice}>
                   <Sparkles size={16} className={styles.metaIcon} />
                   <div>
-                    <strong>Integração Oficial de WhatsApp Cloud API</strong>
-                    <p>Todas as mensagens enviadas e recebidas respeitam as diretrizes oficiais da Meta Graph API v19.0 sem intermediários ou risco de banimento.</p>
+                    <strong>Caixa de Entrada Compartilhada & Multiatendente</strong>
+                    <p>Com o WhatsApp conectado, todos os atendentes autorizados da sua empresa (vendas, suporte e gerência) podem enviar e responder mensagens simultaneamente pelo mesmo número oficial com atribuição e histórico sincronizado.</p>
                   </div>
                 </div>
               </div>

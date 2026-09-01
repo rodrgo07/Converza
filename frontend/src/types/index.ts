@@ -95,17 +95,31 @@ export interface KanbanColumn {
 
 export type MessageDirection = "inbound" | "outbound";
 export type MessageType = "text" | "image" | "audio" | "document" | "video";
-export type MessageStatus = "sent" | "delivered" | "read" | "failed";
+export type MessageStatus = "sending" | "sent" | "delivered" | "read" | "failed";
+
+export interface ConversationEvent {
+  id: number;
+  conversation_id: number;
+  company_id: number;
+  user_id?: number;
+  event_type: "ASSIGNED" | "TRANSFERRED" | "RESOLVED" | "REOPENED";
+  description: string;
+  created_at: string;
+  user?: User;
+}
 
 export interface Message {
   id: number;
   conversation_id: number;
   sender_id?: number;
+  sender_type?: "agent" | "customer" | "system";
   direction: MessageDirection;
   message_type: MessageType;
   content: string;
   media_url?: string;
   status: MessageStatus;
+  external_id?: string;
+  error_message?: string;
   created_at: string;
   sender?: User;
 }
@@ -115,14 +129,19 @@ export interface Conversation {
   company_id: number;
   customer_id: number;
   assigned_user_id?: number;
+  whatsapp_account_id?: number;
   status: string;
+  queue: "all" | "mine" | "unassigned" | "waiting" | "resolved";
   unread_count: number;
   last_message_text?: string;
   last_message_time: string;
+  last_inbound_time?: string;
+  version: number;
   created_at: string;
   customer?: Customer;
   assigned_user?: User;
   messages?: Message[];
+  events?: ConversationEvent[];
 }
 
 export type FollowUpStatus = "pending" | "completed" | "expired";
@@ -169,13 +188,17 @@ export interface QuickReply {
 export interface WhatsAppAccount {
   id: number;
   company_id: number;
+  name?: string;
   phone_number_id?: string;
   business_account_id?: string;
   display_phone_number?: string;
   verified_name?: string;
   is_connected: boolean;
   status: string;
+  quality_rating?: string;
+  webhook_status?: string;
   webhook_verify_token: string;
+  has_token_configured?: boolean;
   created_at: string;
 }
 
@@ -220,3 +243,4 @@ export interface DashboardMetrics {
   urgent_followups: FollowUp[];
   urgent_conversations: Conversation[];
 }
+

@@ -90,17 +90,44 @@ def delete_quick_reply(qr_id: int, current_user: User = Depends(get_current_user
 # WHATSAPP ROUTER
 wa_router = APIRouter()
 
+@wa_router.get('/accounts', response_model=List[WhatsAppAccountOut])
+def get_whatsapp_accounts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Lista todos os números / contas oficiais de WhatsApp conectadas para a empresa.
+    """
+    accounts = db.query(WhatsAppAccount).filter(WhatsAppAccount.company_id == current_user.company_id).all()
+    if not accounts:
+        # Se nenhuma conta existir, cria a conta padrão
+        default_acc = WhatsAppAccount(
+            company_id=current_user.company_id,
+            name="Principal",
+            is_connected=False,
+            status="disconnected",
+            display_phone_number="",
+            verified_name="",
+            webhook_verify_token=f"converza_token_{current_user.company_id}"
+        )
+        db.add(default_acc)
+        db.commit()
+        db.refresh(default_acc)
+        accounts = [default_acc]
+    return accounts
+
 @wa_router.get('/status', response_model=WhatsAppAccountOut)
 def get_whatsapp_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Retorna a conta padrão / primária da empresa. O access_token NUNCA é retornado no schema.
+    """
     account = db.query(WhatsAppAccount).filter(WhatsAppAccount.company_id == current_user.company_id).first()
     if not account:
         account = WhatsAppAccount(
             company_id=current_user.company_id,
+            name="Principal",
             is_connected=False,
-            status='disconnected',
-            display_phone_number='',
-            verified_name='',
-            webhook_verify_token=f'converza_token_{current_user.company_id}'
+            status="disconnected",
+            display_phone_number="",
+            verified_name="",
+            webhook_verify_token=f"converza_token_{current_user.company_id}"
         )
         db.add(account)
         db.commit()
@@ -108,33 +135,128 @@ def get_whatsapp_status(current_user: User = Depends(get_current_user), db: Sess
     return account
 
 @wa_router.post('/connect', response_model=WhatsAppAccountOut)
-def connect_whatsapp(conn_in: WhatsAppConnectRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def connect_whatsapp(
+    conn_in: WhatsAppConnectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Salva credenciais da WhatsApp Business Platform / Cloud API no backend
+    e realiza teste de verificação real com os servidores da Meta antes de aprovar a conexão.
+    """
+    from app.services.whatsapp import WhatsAppProvider
+    from app.core.audit import log_audit
+    from app.core.permissions import check_permission
+
+    check_permission(current_user, 'whatsapp.manage')
+
     account = db.query(WhatsAppAccount).filter(WhatsAppAccount.company_id == current_user.company_id).first()
     if not account:
         account = WhatsAppAccount(company_id=current_user.company_id)
         db.add(account)
 
-    account.phone_number_id = conn_in.phone_number_id or ''
-    account.business_account_id = conn_in.business_account_id or ''
-    account.display_phone_number = conn_in.display_phone_number or ''
-    account.verified_name = conn_in.verified_name or ''
-    account.access_token = conn_in.access_token or ''
-    account.is_connected = True
-    account.status = 'connected'
+    account.name = conn_in.name or "Principal"
+    account.phone_number_id = conn_in.phone_number_id.strip() if conn_in.phone_number_id else None
+    account.business_account_id = conn_in.business_account_id.strip() if conn_in.business_account_id else None
+    account.display_phone_number = conn_in.display_phone_number.strip() if conn_in.display_phone_number else None
+    account.verified_name = conn_in.verified_name.strip() if conn_in.verified_name else None
+    if conn_in.access_token:
+        account.access_token = conn_in.access_token.strip()
+
+    # Validação REAL com a API da Meta
+    if account.phone_number_id and account.access_token:
+        provider = WhatsAppProvider(phone_number_id=account.phone_number_id, access_token=account.access_token)
+        try:
+            meta_data = await provider.verify_credentials()
+            account.is_connected = True
+            account.status = "connected"
+            account.verified_name = meta_data.get("verified_name") or account.verified_name
+            account.display_phone_number = meta_data.get("display_phone_number") or account.display_phone_number
+            account.quality_rating = meta_data.get("quality_rating") or "GREEN"
+        except Exception as exc:
+            account.is_connected = False
+            account.status = "error"
+            db.commit()
+            raise HTTPException(status_code=400, detail={"code": "META_VERIFICATION_FAILED", "message": str(exc)})
+    else:
+        account.is_connected = False
+        account.status = "disconnected"
+
+    log_audit(
+        db=db,
+        company_id=current_user.company_id,
+        user_id=current_user.id,
+        action="WHATSAPP_CONNECTED" if account.is_connected else "WHATSAPP_CONNECT_FAILED",
+        resource="WhatsAppAccount",
+        resource_id=str(account.id),
+        details={"phone_number_id": account.phone_number_id, "display_phone": account.display_phone_number}
+    )
 
     db.commit()
     db.refresh(account)
     return account
 
+@wa_router.post('/test-connection')
+async def test_whatsapp_connection(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Executa teste de conexão real e ao vivo com a Graph API da Meta.
+    """
+    from app.services.whatsapp import WhatsAppProvider
+    account = db.query(WhatsAppAccount).filter(WhatsAppAccount.company_id == current_user.company_id).first()
+    if not account or not account.phone_number_id or not account.access_token:
+        return {
+            "success": False,
+            "status": "Configuração incompleta",
+            "message": "Nenhuma credencial oficial do WhatsApp Cloud API configurada no backend."
+        }
+
+    provider = WhatsAppProvider(phone_number_id=account.phone_number_id, access_token=account.access_token)
+    try:
+        data = await provider.verify_credentials()
+        return {
+            "success": True,
+            "status": "Conectado e Operante",
+            "message": "WhatsApp Cloud API conectada e respondendo perfeitamente.",
+            "display_phone_number": data.get("display_phone_number", account.display_phone_number),
+            "verified_name": data.get("verified_name", account.verified_name),
+            "quality_rating": data.get("quality_rating", "GREEN")
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "status": "WhatsApp conectado, mas a API não respondeu corretamente",
+            "message": str(exc)
+        }
+
 @wa_router.post('/disconnect', response_model=WhatsAppAccountOut)
 def disconnect_whatsapp(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Desconecta o número oficial da empresa.
+    """
+    from app.core.audit import log_audit
+    from app.core.permissions import check_permission
+    check_permission(current_user, 'whatsapp.disconnect')
+
     account = db.query(WhatsAppAccount).filter(WhatsAppAccount.company_id == current_user.company_id).first()
     if account:
         account.is_connected = False
         account.status = 'disconnected'
+        account.access_token = None
+        log_audit(
+            db=db,
+            company_id=current_user.company_id,
+            user_id=current_user.id,
+            action="WHATSAPP_DISCONNECTED",
+            resource="WhatsAppAccount",
+            resource_id=str(account.id)
+        )
         db.commit()
         db.refresh(account)
     return account
+
 
 # NOTIFICATIONS ROUTER
 notif_router = APIRouter()

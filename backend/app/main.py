@@ -57,6 +57,88 @@ app.include_router(extra_routers.reports_router, prefix=f"{api_v1}/reports", tag
 app.include_router(webhooks.router, prefix=f"{api_v1}/webhooks", tags=["WhatsApp Webhook"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["WhatsApp Webhook Root"])
 
+# Realtime WebSocket & SSE Endpoints
+from fastapi import WebSocket, WebSocketDisconnect, Query
+from fastapi.responses import StreamingResponse
+from app.core.events import manager
+from jose import jwt
+from app.core.config import settings
+from app.db.session import SessionLocal
+from app.models import User
+import json
+import asyncio
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
+    """
+    WebSocket em tempo real com autenticação JWT e isolamento multi-tenant por empresa (company_id).
+    Permite que múltiplos atendentes recebam novas mensagens e eventos instantaneamente.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except Exception:
+        await websocket.close(code=1008) # Policy Violation
+        return
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        if not user:
+            await websocket.close(code=1008)
+            return
+        company_id = user.company_id
+    finally:
+        db.close()
+
+    await manager.connect(websocket, company_id)
+    try:
+        while True:
+            # Manter conexão viva recebendo pings/mensagens de presença do atendente
+            data = await websocket.receive_text()
+            try:
+                msg_data = json.loads(data)
+                if msg_data.get("type") == "PING":
+                    await websocket.send_text(json.dumps({"type": "PONG"}))
+            except Exception:
+                pass
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, company_id)
+    except Exception:
+        manager.disconnect(websocket, company_id)
+
+@app.get("/api/v1/realtime/events")
+async def sse_events(token: str = Query(...)):
+    """
+    Server-Sent Events (SSE) fallback para atualizações em tempo real.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except Exception:
+        return {"error": "Invalid token"}
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"error": "User not found"}
+        company_id = user.company_id
+    finally:
+        db.close()
+
+    queue = manager.subscribe_sse(company_id)
+
+    async def event_generator():
+        try:
+            while True:
+                data = await queue.get()
+                yield f"data: {json.dumps(data)}\n\n"
+        except asyncio.CancelledError:
+            manager.unsubscribe_sse(company_id, queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 @app.get("/")
 def root():
     return {
@@ -83,3 +165,4 @@ def health_check():
         "database": db_status,
         "version": "1.0.0"
     }
+

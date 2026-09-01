@@ -1,4 +1,14 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
+export function getApiUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== "undefined") {
+    // No browser, usa rota relativa gerenciada pelo Next.js proxy ou direto
+    return "/api/v1";
+  }
+  return "http://127.0.0.1:8000/api/v1";
+}
+
 
 export async function apiFetch<T>(
   endpoint: string,
@@ -15,7 +25,8 @@ export async function apiFetch<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_URL}${endpoint}`, {
+  const baseUrl = getApiUrl();
+  const res = await fetch(`${baseUrl}${endpoint}`, {
     ...options,
     headers,
   });

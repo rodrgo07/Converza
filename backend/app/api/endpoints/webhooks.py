@@ -1,14 +1,16 @@
-﻿from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.config import settings
+from app.core.events import manager
 from app.models import (
     WhatsAppAccount, Company, Customer, Conversation, Message,
-    MessageDirection, MessageType, MessageStatus, Notification
+    MessageDirection, MessageType, MessageStatus, Notification, ConversationEvent
 )
+from app.schemas import MessageOut, ConversationOut
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,6 +49,7 @@ async def receive_webhook(
     """
     Endpoint que recebe eventos reais de mensagens recebidas e status de entrega/leitura da Meta WhatsApp Cloud API.
     Possui idempotência garantida através do ID único da mensagem (wamid).
+    Notifica atendentes conectados em tempo real via WebSocket.
     """
     try:
         payload = await request.json()
@@ -64,13 +67,13 @@ async def receive_webhook(
             metadata = value.get("metadata", {})
             phone_number_id = metadata.get("phone_number_id")
 
-            # 1. Identificar a empresa correspondente ao Phone Number ID
+            # 1. Identificar a conta WhatsApp correspondente ao Phone Number ID
             wa_account = None
             if phone_number_id:
                 wa_account = db.query(WhatsAppAccount).filter(WhatsAppAccount.phone_number_id == phone_number_id).first()
 
             if not wa_account:
-                # Se não encontrar por phone_number_id específico, busca a primeira conta conectada como fallback
+                # Fallback: primeira conta conectada
                 wa_account = db.query(WhatsAppAccount).filter(WhatsAppAccount.is_connected == True).first()
 
             if not wa_account:
@@ -150,10 +153,15 @@ async def receive_webhook(
                     conv = Conversation(
                         company_id=company_id,
                         customer_id=customer.id,
+                        whatsapp_account_id=wa_account.id,
+                        assigned_user_id=customer.assigned_user_id,
                         status="open",
+                        queue="mine" if customer.assigned_user_id else "unassigned",
                         unread_count=1,
                         last_message_text=content,
                         last_message_time=now,
+                        last_inbound_time=now,
+                        version=1,
                         created_at=now
                     )
                     db.add(conv)
@@ -162,14 +170,21 @@ async def receive_webhook(
                     conv.unread_count = (conv.unread_count or 0) + 1
                     conv.last_message_text = content
                     conv.last_message_time = now
+                    conv.last_inbound_time = now
+                    conv.whatsapp_account_id = wa_account.id
                     conv.status = "open"
+                    if not conv.assigned_user_id:
+                        conv.queue = "unassigned"
+                    conv.version = (conv.version or 1) + 1
 
                 customer.last_interaction = now
 
                 # 5. Salvar Mensagem no Banco
                 new_msg = Message(
                     conversation_id=conv.id,
-                    sender_id=None, # Mensagem vinda do cliente
+                    sender_id=None,
+                    sender_type="customer",
+                    whatsapp_account_id=wa_account.id,
                     direction=MessageDirection.INBOUND,
                     message_type=m_type,
                     content=content,
@@ -192,8 +207,23 @@ async def receive_webhook(
                 )
                 db.add(notif)
                 db.commit()
+                db.refresh(new_msg)
+                db.refresh(conv)
 
-            # 6. Processar Atualizações de Status (sent, delivered, read, failed)
+                # 6. Realtime WebSocket Broadcast para todos os atendentes conectados
+                try:
+                    await manager.broadcast_to_company(
+                        company_id=company_id,
+                        event_type="NEW_MESSAGE",
+                        data={
+                            "message": MessageOut.model_validate(new_msg).model_dump(mode="json"),
+                            "conversation": ConversationOut.model_validate(conv).model_dump(mode="json")
+                        }
+                    )
+                except Exception as b_err:
+                    logger.warning(f"Erro no broadcast websocket: {b_err}")
+
+            # 7. Processar Atualizações de Status (sent, delivered, read, failed)
             statuses = value.get("statuses", [])
             for st in statuses:
                 status_wamid = st.get("id")
@@ -213,5 +243,24 @@ async def receive_webhook(
                     elif status_val == "failed":
                         msg_to_update.status = MessageStatus.FAILED
                     db.commit()
+                    db.refresh(msg_to_update)
+
+                    # Realtime Broadcast de Status
+                    try:
+                        conv = db.query(Conversation).filter(Conversation.id == msg_to_update.conversation_id).first()
+                        if conv:
+                            await manager.broadcast_to_company(
+                                company_id=conv.company_id,
+                                event_type="MESSAGE_STATUS_UPDATE",
+                                data={
+                                    "message_id": msg_to_update.id,
+                                    "external_id": msg_to_update.external_id,
+                                    "status": msg_to_update.status.value,
+                                    "conversation_id": conv.id
+                                }
+                            )
+                    except Exception as st_err:
+                        logger.warning(f"Erro no broadcast de status: {st_err}")
 
     return {"status": "success"}
+

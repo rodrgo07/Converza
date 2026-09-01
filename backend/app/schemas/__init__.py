@@ -198,6 +198,19 @@ class KanbanColumn(BaseModel):
     total_value: float
     count: int
 
+class ConversationEventOut(BaseModel):
+    id: int
+    conversation_id: int
+    company_id: int
+    user_id: Optional[int] = None
+    event_type: str
+    description: str
+    created_at: datetime
+    user: Optional[UserOut] = None
+
+    class Config:
+        from_attributes = True
+
 # Message
 class MessageBase(BaseModel):
     content: str
@@ -214,7 +227,10 @@ class MessageOut(MessageBase):
     id: int
     conversation_id: int
     sender_id: Optional[int] = None
+    sender_type: Optional[str] = 'agent'
     status: MessageStatus
+    external_id: Optional[str] = None
+    error_message: Optional[str] = None
     created_at: datetime
     sender: Optional[UserOut] = None
 
@@ -225,7 +241,9 @@ class MessageOut(MessageBase):
 class ConversationBase(BaseModel):
     customer_id: int
     assigned_user_id: Optional[int] = None
+    whatsapp_account_id: Optional[int] = None
     status: str = 'open'
+    queue: Optional[str] = 'unassigned'
 
 class ConversationCreate(ConversationBase):
     pass
@@ -233,6 +251,17 @@ class ConversationCreate(ConversationBase):
 class ConversationUpdate(BaseModel):
     assigned_user_id: Optional[int] = None
     status: Optional[str] = None
+    queue: Optional[str] = None
+    version: Optional[int] = None
+
+class ConversationAssignRequest(BaseModel):
+    assigned_user_id: Optional[int] = None
+    expected_version: Optional[int] = None
+
+class ConversationTransferRequest(BaseModel):
+    target_user_id: int
+    notes: Optional[str] = None
+    expected_version: Optional[int] = None
 
 class ConversationOut(ConversationBase):
     id: int
@@ -240,6 +269,8 @@ class ConversationOut(ConversationBase):
     unread_count: int
     last_message_text: Optional[str] = None
     last_message_time: datetime
+    last_inbound_time: Optional[datetime] = None
+    version: int = 1
     created_at: datetime
     customer: Optional[CustomerOut] = None
     assigned_user: Optional[UserOut] = None
@@ -249,6 +280,7 @@ class ConversationOut(ConversationBase):
 
 class ConversationDetailOut(ConversationOut):
     messages: List[MessageOut] = []
+    events: List[ConversationEventOut] = []
 
 # FollowUp
 class FollowUpBase(BaseModel):
@@ -332,6 +364,7 @@ class QuickReplyOut(QuickReplyBase):
         from_attributes = True
 
 class WhatsAppConnectRequest(BaseModel):
+    name: Optional[str] = "Principal"
     phone_number_id: Optional[str] = None
     business_account_id: Optional[str] = None
     display_phone_number: Optional[str] = None
@@ -341,18 +374,34 @@ class WhatsAppConnectRequest(BaseModel):
 class WhatsAppAccountOut(BaseModel):
     id: int
     company_id: int
+    name: Optional[str] = "Principal"
     phone_number_id: Optional[str] = None
     business_account_id: Optional[str] = None
     display_phone_number: Optional[str] = None
     verified_name: Optional[str] = None
     is_connected: bool
     status: str
+    quality_rating: Optional[str] = None
+    webhook_status: Optional[str] = "active"
     webhook_verify_token: str
     has_token_configured: bool = False
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+class WhatsAppTestConnectionOut(BaseModel):
+    success: bool
+    status: str
+    message: str
+    display_phone_number: Optional[str] = None
+    verified_name: Optional[str] = None
+    quality_rating: Optional[str] = None
+
+class WhatsAppTemplateSendRequest(BaseModel):
+    template_name: str
+    language_code: Optional[str] = "pt_BR"
+    components: Optional[List[dict]] = None
 
 # Notification
 class NotificationOut(BaseModel):
@@ -395,3 +444,4 @@ class DashboardMetrics(BaseModel):
     sales_chart_data: List[dict]
     urgent_followups: List[FollowUpOut]
     urgent_conversations: List[ConversationOut]
+

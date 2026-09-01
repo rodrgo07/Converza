@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, Company } from "@/types";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getApiUrl } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
 interface AuthContextType {
@@ -57,8 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     formData.append("username", email);
     formData.append("password", pass);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api/v1";
-    const res = await fetch(`${API_URL}/auth/login`, {
+    const baseUrl = getApiUrl();
+    const res = await fetch(`${baseUrl}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: formData.toString(),
