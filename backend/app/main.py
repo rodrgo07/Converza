@@ -4,9 +4,6 @@ from app.core.config import settings
 from app.db.session import engine, Base
 from app.models import *
 
-# Create tables
-Base.metadata.create_all(bind=engine)
-
 from app.api.endpoints import (
     auth, customers, conversations, pipeline, followups, tasks, extra_routers, webhooks
 )
@@ -67,4 +64,22 @@ def root():
         "status": "online",
         "version": "1.0.0",
         "docs": "/docs"
+    }
+
+@app.get("/health")
+def health_check():
+    db_status = "connected"
+    try:
+        from sqlalchemy import text
+        from app.db.session import SessionLocal
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+    except Exception:
+        db_status = "disconnected"
+
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "version": "1.0.0"
     }
