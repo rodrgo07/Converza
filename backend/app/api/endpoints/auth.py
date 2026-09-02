@@ -4,9 +4,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.config import settings
-from app.core.security import create_access_token, verify_password, get_password_hash
+from app.core.security import create_access_token, create_refresh_token, verify_password, get_password_hash
 from app.models import User, Company, Subscription, Tag, PipelineStage, PipelineStageType, UserRole
-from app.schemas import Token, UserCreate, UserOut, OnboardingSetup
+from app.schemas import Token, RefreshTokenRequest, UserCreate, UserOut, OnboardingSetup
 from app.api.deps import get_current_user, get_current_company
 
 router = APIRouter()
@@ -91,8 +91,10 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
 
     access_token = create_access_token(subject=new_user.id)
+    refresh_token = create_refresh_token(subject=new_user.id)
     return {
         'access_token': access_token,
+        'refresh_token': refresh_token,
         'token_type': 'bearer',
         'user': UserOut.model_validate(new_user)
     }
@@ -111,12 +113,55 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail='Usuário inativo. Contate o administrador.'
         )
 
+    # Set user online on login
+    user.is_online = True
+    db.commit()
+
     access_token = create_access_token(subject=user.id)
+    refresh_token = create_refresh_token(subject=user.id)
     return {
         'access_token': access_token,
+        'refresh_token': refresh_token,
         'token_type': 'bearer',
         'user': UserOut.model_validate(user)
     }
+
+@router.post('/refresh', response_model=Token)
+def refresh_token(req: RefreshTokenRequest, db: Session = Depends(get_db)):
+    from jose import jwt, JWTError
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail='Refresh token inválido ou expirado.',
+        headers={'WWW-Authenticate': 'Bearer'},
+    )
+    try:
+        payload = jwt.decode(req.refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id_str: str = payload.get('sub')
+        token_type: str = payload.get('type')
+        if not user_id_str or token_type != 'refresh':
+            raise credentials_exception
+        user_id = int(user_id_str)
+    except (JWTError, ValueError):
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if not user:
+        raise credentials_exception
+
+    new_access = create_access_token(subject=user.id)
+    new_refresh = create_refresh_token(subject=user.id)
+    return {
+        'access_token': new_access,
+        'refresh_token': new_refresh,
+        'token_type': 'bearer',
+        'user': UserOut.model_validate(user)
+    }
+
+@router.post('/logout')
+def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.is_online = False
+    db.commit()
+    return {'message': 'Logout realizado com sucesso.'}
 
 @router.get('/me', response_model=UserOut)
 def read_current_user(current_user: User = Depends(get_current_user)):

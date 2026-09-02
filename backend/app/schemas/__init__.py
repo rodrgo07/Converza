@@ -7,10 +7,15 @@ from app.models import UserRole, PipelineStageType, TaskStatus, FollowUpStatus, 
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: Optional[str] = None
     user: Any
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
+    type: Optional[str] = None
 
 # User
 class UserBase(BaseModel):

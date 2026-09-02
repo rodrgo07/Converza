@@ -29,7 +29,7 @@ if not settings.SECRET_KEY:
     settings.SECRET_KEY = secrets.token_hex(32)
 
 if not settings.WHATSAPP_VERIFY_TOKEN:
-    settings.WHATSAPP_VERIFY_TOKEN = secrets.token_hex(16)
+    settings.WHATSAPP_VERIFY_TOKEN = "converza_verify_token_2026"
 
 if not settings.DATABASE_URL:
     db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "converza.db")

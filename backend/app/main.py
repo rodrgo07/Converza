@@ -2,7 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db
 from app.models import User
 from app.core.events import manager
 from jose import jwt
@@ -78,15 +78,19 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
         await websocket.close(code=1008)
         return
 
-    db = SessionLocal()
+    db_gen = app.dependency_overrides.get(get_db, get_db)()
     try:
+        db = next(db_gen)
         user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
         if not user:
             await websocket.close(code=1008)
             return
         company_id = user.company_id
     finally:
-        db.close()
+        try:
+            next(db_gen, None)
+        except Exception:
+            pass
 
     await manager.connect(websocket, company_id)
     try:
@@ -112,14 +116,18 @@ async def sse_events(token: str = Query(...)):
     except Exception:
         return JSONResponse(status_code=401, content={"error": "Token inválido"})
 
-    db = SessionLocal()
+    db_gen = app.dependency_overrides.get(get_db, get_db)()
     try:
+        db = next(db_gen)
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             return JSONResponse(status_code=401, content={"error": "Usuário não encontrado"})
         company_id = user.company_id
     finally:
-        db.close()
+        try:
+            next(db_gen, None)
+        except Exception:
+            pass
 
     queue = manager.subscribe_sse(company_id)
 

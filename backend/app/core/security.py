@@ -10,7 +10,17 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
         expire = now + expires_delta
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {'exp': expire, 'sub': str(subject)}
+    to_encode = {'exp': expire, 'sub': str(subject), 'type': 'access'}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    now = datetime.now(timezone.utc)
+    if expires_delta:
+        expire = now + expires_delta
+    else:
+        expire = now + timedelta(days=30)  # 30 days refresh window
+    to_encode = {'exp': expire, 'sub': str(subject), 'type': 'refresh'}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 

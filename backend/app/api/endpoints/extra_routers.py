@@ -530,3 +530,12 @@ def get_reports_summary(current_user: User = Depends(get_current_user), db: Sess
         'average_response_time_minutes': 0.0,
         'messages_exchanged': total_msgs,
     }
+
+@reports_router.post('/process-automations')
+def run_automations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.automations import process_due_followups_and_tasks
+    result = process_due_followups_and_tasks(db)
+    return {
+        "success": True,
+        "result": result
+    }

@@ -52,7 +52,24 @@ def get_auth_token(email, password="pass123"):
 def test_auth_login_valid_and_invalid():
     resp = client.post("/api/v1/auth/login", data={"username": "admin@alfa.com", "password": "pass123"})
     assert resp.status_code == 200
-    assert "access_token" in resp.json()
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    refresh_tok = data["refresh_token"]
+
+    # Test /refresh with valid token
+    resp_refresh = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_tok})
+    assert resp_refresh.status_code == 200
+    assert "access_token" in resp_refresh.json()
+
+    # Test /refresh with invalid token
+    resp_invalid_refresh = client.post("/api/v1/auth/refresh", json={"refresh_token": "fake_refresh_token"})
+    assert resp_invalid_refresh.status_code == 401
+
+    # Test /logout
+    token_alfa = data["access_token"]
+    resp_logout = client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token_alfa}"})
+    assert resp_logout.status_code == 200
 
     resp_invalid = client.post("/api/v1/auth/login", data={"username": "admin@alfa.com", "password": "wrongpassword"})
     assert resp_invalid.status_code == 400
