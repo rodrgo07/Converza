@@ -84,11 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCompany(comp);
 
     if (!data.user.onboarding_completed) {
-      router.push("/onboarding");
+      window.location.href = "/onboarding";
     } else {
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     }
-  }, [router]);
+  }, []);
 
   const register = useCallback(async (
     name: string,
