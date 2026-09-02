@@ -19,7 +19,7 @@ from app.api.deps import get_current_user
 
 router = APIRouter()
 
-@router.get('/', response_model=List[ConversationOut])
+@router.get("", response_model=List[ConversationOut])
 def get_conversations(
     queue: Optional[str] = None, # all, mine, unassigned, resolved, waiting
     status_filter: Optional[str] = Query(None, alias="status"),

@@ -16,7 +16,10 @@ export default function DashboardLayout({
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push("/login");
+      const token = typeof window !== "undefined" ? localStorage.getItem("converza_token") : null;
+      if (!token) {
+        router.push("/login");
+      }
     }
   }, [user, isLoading, router]);
 
@@ -30,6 +33,15 @@ export default function DashboardLayout({
   }
 
   if (!user) {
+    const hasToken = typeof window !== "undefined" && localStorage.getItem("converza_token");
+    if (hasToken) {
+      return (
+        <div className={styles.loadingContainer}>
+          <div className={styles.spinner} />
+          <p className={styles.loadingText}>Carregando o Converza...</p>
+        </div>
+      );
+    }
     return null;
   }
 

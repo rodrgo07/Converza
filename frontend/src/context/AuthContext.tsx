@@ -37,23 +37,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const fetchMe = async (authToken: string) => {
+    console.log("[AuthContext] fetchMe called, token:", authToken.substring(0, 20) + "...");
     try {
       const userData = await apiFetch<User>("/auth/me", {
         headers: { Authorization: `Bearer ${authToken}` },
       });
+      console.log("[AuthContext] /auth/me OK, user:", userData?.email);
       setUser(userData);
-      const companyData = await apiFetch<Company>("/company", {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-      setCompany(companyData);
-    } catch {
+    } catch (err) {
+      console.error("[AuthContext] /auth/me FAILED:", err);
       localStorage.removeItem("converza_token");
       setToken(null);
       setUser(null);
       setCompany(null);
-    } finally {
       setIsLoading(false);
+      return;
     }
+
+    try {
+      console.log("[AuthContext] fetching company from: /company");
+      const companyData = await apiFetch<Company>("/company", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      console.log("[AuthContext] /company OK");
+      setCompany(companyData);
+    } catch (err) {
+      console.error("[AuthContext] /company FAILED:", err);
+    }
+
+    console.log("[AuthContext] fetchMe complete, setting isLoading=false");
+    setIsLoading(false);
   };
 
   const login = useCallback(async (email: string, pass: string) => {
@@ -77,17 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("converza_token", data.access_token);
     setToken(data.access_token);
     setUser(data.user);
-
-    const comp = await apiFetch<Company>("/company", {
-      headers: { Authorization: `Bearer ${data.access_token}` },
-    });
-    setCompany(comp);
-
-    if (!data.user.onboarding_completed) {
-      window.location.href = "/onboarding";
-    } else {
-      window.location.href = "/dashboard";
-    }
+    setIsLoading(false);
   }, []);
 
   const register = useCallback(async (

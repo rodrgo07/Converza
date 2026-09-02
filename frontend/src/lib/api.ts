@@ -35,7 +35,10 @@ export async function apiFetch<T>(
   });
 
   if (res.status === 401) {
-    if (typeof window !== "undefined" && !isRedirectingToLogin) {
+    const callerHandlesAuth = !!(options.headers as Record<string, string>)?.["Authorization"];
+    const isOnLoginPage = typeof window !== "undefined" && window.location.pathname === "/login";
+    
+    if (typeof window !== "undefined" && !isRedirectingToLogin && !isOnLoginPage && !callerHandlesAuth) {
       isRedirectingToLogin = true;
       localStorage.removeItem("converza_token");
       window.location.href = "/login";

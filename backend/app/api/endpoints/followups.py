@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 
 router = APIRouter()
 
-@router.get('/', response_model=List[FollowUpOut])
+@router.get("", response_model=List[FollowUpOut])
 def get_follow_ups(
     status: Optional[FollowUpStatus] = None,
     customer_id: Optional[int] = None,
@@ -23,7 +23,7 @@ def get_follow_ups(
         query = query.filter(FollowUp.customer_id == customer_id)
     return query.order_by(FollowUp.due_date.asc()).all()
 
-@router.post('/', response_model=FollowUpOut)
+@router.post("", response_model=FollowUpOut)
 def create_follow_up(
     fu_in: FollowUpCreate,
     current_user: User = Depends(get_current_user),

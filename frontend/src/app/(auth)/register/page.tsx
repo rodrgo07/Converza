@@ -50,10 +50,12 @@ export default function RegisterPage() {
 
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Seu Nome Completo</label>
+            <label htmlFor="reg-name" className={styles.label}>Seu Nome Completo</label>
             <div className={styles.inputWrapper}>
               <User size={16} className={styles.inputIcon} />
               <input
+                id="reg-name"
+                name="name"
                 type="text"
                 className={styles.input}
                 placeholder="Ex: João Silva"
@@ -65,10 +67,12 @@ export default function RegisterPage() {
           </div>
 
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Nome da sua Empresa ou Negócio</label>
+            <label htmlFor="reg-company" className={styles.label}>Nome da sua Empresa ou Negócio</label>
             <div className={styles.inputWrapper}>
               <Building size={16} className={styles.inputIcon} />
               <input
+                id="reg-company"
+                name="company_name"
                 type="text"
                 className={styles.input}
                 placeholder="Ex: Barbearia do João / Loja Elegance"
@@ -79,10 +83,12 @@ export default function RegisterPage() {
           </div>
 
           <div className={styles.inputGroup}>
-            <label className={styles.label}>WhatsApp / Telefone</label>
+            <label htmlFor="reg-phone" className={styles.label}>WhatsApp / Telefone</label>
             <div className={styles.inputWrapper}>
               <Phone size={16} className={styles.inputIcon} />
               <input
+                id="reg-phone"
+                name="phone"
                 type="tel"
                 className={styles.input}
                 placeholder="(11) 98765-4321"
@@ -93,10 +99,12 @@ export default function RegisterPage() {
           </div>
 
           <div className={styles.inputGroup}>
-            <label className={styles.label}>E-mail</label>
+            <label htmlFor="reg-email" className={styles.label}>E-mail</label>
             <div className={styles.inputWrapper}>
               <Mail size={16} className={styles.inputIcon} />
               <input
+                id="reg-email"
+                name="email"
                 type="email"
                 className={styles.input}
                 placeholder="joao@seuemail.com"
@@ -109,10 +117,12 @@ export default function RegisterPage() {
           </div>
 
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Crie uma Senha Segura</label>
+            <label htmlFor="reg-password" className={styles.label}>Crie uma Senha Segura</label>
             <div className={styles.inputWrapper}>
               <Lock size={16} className={styles.inputIcon} />
               <input
+                id="reg-password"
+                name="password"
                 type="password"
                 className={styles.input}
                 placeholder="Mínimo 6 caracteres"

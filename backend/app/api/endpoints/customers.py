@@ -12,7 +12,7 @@ from app.api.deps import get_current_user, get_current_company
 
 router = APIRouter()
 
-@router.get('/', response_model=List[CustomerOut])
+@router.get("", response_model=List[CustomerOut])
 def get_customers(
     search: Optional[str] = None,
     filter_stage: Optional[str] = None,
@@ -34,7 +34,7 @@ def get_customers(
     customers = query.order_by(Customer.last_interaction.desc().nullslast(), Customer.created_at.desc()).offset(skip).limit(limit).all()
     return customers
 
-@router.post('/', response_model=CustomerOut)
+@router.post("", response_model=CustomerOut)
 def create_customer(
     customer_in: CustomerCreate,
     current_user: User = Depends(get_current_user),

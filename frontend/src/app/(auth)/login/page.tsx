@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import styles from "./Auth.module.css";
@@ -11,8 +12,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const { error, success } = useToast();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,10 +27,11 @@ export default function LoginPage() {
       setIsLoading(true);
       await login(email, password);
       success("Login efetuado com sucesso!");
+      // Navigate after successful login
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "E-mail ou senha incorretos.";
       error(msg);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -46,10 +49,12 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputGroup}>
-            <label className={styles.label}>E-mail de acesso</label>
+            <label htmlFor="login-email" className={styles.label}>E-mail de acesso</label>
             <div className={styles.inputWrapper}>
               <Mail size={16} className={styles.inputIcon} />
               <input
+                id="login-email"
+                name="username"
                 type="email"
                 className={styles.input}
                 placeholder="seu@email.com"
@@ -63,12 +68,14 @@ export default function LoginPage() {
 
           <div className={styles.inputGroup}>
             <div className={styles.labelRow}>
-              <label className={styles.label}>Sua Senha</label>
+              <label htmlFor="login-password" className={styles.label}>Sua Senha</label>
               <a href="#" className={styles.forgotPass}>Esqueceu a senha?</a>
             </div>
             <div className={styles.inputWrapper}>
               <Lock size={16} className={styles.inputIcon} />
               <input
+                id="login-password"
+                name="password"
                 type="password"
                 className={styles.input}
                 placeholder="••••••••"

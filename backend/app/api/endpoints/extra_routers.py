@@ -22,11 +22,11 @@ from app.api.deps import get_current_user, get_current_company
 # TAGS ROUTER
 tags_router = APIRouter()
 
-@tags_router.get('/', response_model=List[TagOut])
+@tags_router.get("", response_model=List[TagOut])
 def get_tags(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Tag).filter(Tag.company_id == current_user.company_id).all()
 
-@tags_router.post('/', response_model=TagOut)
+@tags_router.post("", response_model=TagOut)
 def create_tag(tag_in: TagCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     tag = Tag(company_id=current_user.company_id, name=tag_in.name, color=tag_in.color)
     db.add(tag)
@@ -46,11 +46,11 @@ def delete_tag(tag_id: int, current_user: User = Depends(get_current_user), db: 
 # QUICK REPLIES ROUTER
 qr_router = APIRouter()
 
-@qr_router.get('/', response_model=List[QuickReplyOut])
+@qr_router.get("", response_model=List[QuickReplyOut])
 def get_quick_replies(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(QuickReply).filter(QuickReply.company_id == current_user.company_id).all()
 
-@qr_router.post('/', response_model=QuickReplyOut)
+@qr_router.post("", response_model=QuickReplyOut)
 def create_quick_reply(qr_in: QuickReplyCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     shortcut = qr_in.shortcut if qr_in.shortcut.startswith('/') else f'/{qr_in.shortcut}'
     qr = QuickReply(
@@ -261,7 +261,7 @@ def disconnect_whatsapp(current_user: User = Depends(get_current_user), db: Sess
 # NOTIFICATIONS ROUTER
 notif_router = APIRouter()
 
-@notif_router.get('/', response_model=List[NotificationOut])
+@notif_router.get("", response_model=List[NotificationOut])
 def get_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Notification).filter(
         Notification.company_id == current_user.company_id,
@@ -291,7 +291,7 @@ def mark_all_read(current_user: User = Depends(get_current_user), db: Session = 
 # SUBSCRIPTION ROUTER
 sub_router = APIRouter()
 
-@sub_router.get('/', response_model=SubscriptionOut)
+@sub_router.get("", response_model=SubscriptionOut)
 def get_subscription(company: Company = Depends(get_current_company), db: Session = Depends(get_db)):
     sub = db.query(Subscription).filter(Subscription.company_id == company.id).first()
     if not sub:
@@ -327,11 +327,11 @@ def upgrade_subscription(
 # TEAM / USERS ROUTER
 team_router = APIRouter()
 
-@team_router.get('/', response_model=List[UserOut])
+@team_router.get("", response_model=List[UserOut])
 def get_team_members(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(User).filter(User.company_id == current_user.company_id).all()
 
-@team_router.post('/', response_model=UserOut)
+@team_router.post("", response_model=UserOut)
 def add_team_member(
     user_in: UserCreate,
     current_user: User = Depends(get_current_user),
@@ -418,11 +418,11 @@ def delete_team_member(
 # COMPANY ROUTER
 company_router = APIRouter()
 
-@company_router.get('/', response_model=CompanyOut)
+@company_router.get("", response_model=CompanyOut)
 def get_company_details(company: Company = Depends(get_current_company)):
     return company
 
-@company_router.put('/', response_model=CompanyOut)
+@company_router.put("", response_model=CompanyOut)
 def update_company(
     comp_in: CompanyUpdate,
     company: Company = Depends(get_current_company),

@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 
 router = APIRouter()
 
-@router.get('/', response_model=List[TaskOut])
+@router.get("", response_model=List[TaskOut])
 def get_tasks(
     status: Optional[TaskStatus] = None,
     customer_id: Optional[int] = None,
@@ -23,7 +23,7 @@ def get_tasks(
         query = query.filter(Task.customer_id == customer_id)
     return query.order_by(Task.due_date.asc().nullslast()).all()
 
-@router.post('/', response_model=TaskOut)
+@router.post("", response_model=TaskOut)
 def create_task(
     task_in: TaskCreate,
     current_user: User = Depends(get_current_user),
